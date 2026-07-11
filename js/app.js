@@ -264,32 +264,25 @@ function renderVendorInactiveTujuan() {
 /* ---- Non Aktif: per rute Origin × Tujuan × Type ---- */
 function renderVendorInactiveRoute() {
   const rows = (computed.routeInactive || [])
+    .filter(r => r.totalTrip > 0)                    // hanya rute yang ADA trip
     .filter(filterPulau)
     .filter(r => matchSearch(r.tujuan, r.origin, ...r.inactive));
   let html = `<div class="section-head">
       <span class="dot red"></span> Vendor Non Aktif — Per Rute
-      <span class="muted">— vendor terdaftar AVL di rute tsb tapi 0 trip di rute itu (window ini)</span>
+      <span class="muted">— vendor terdaftar AVL di rute yang ada trip, tapi 0 trip di rute itu (window ini)</span>
     </div>`;
   if (!rows.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh filter).</div>`;
   html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
-    <th></th><th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Trip Rute</th>
-    <th>AVL</th><th>Aktif</th><th>Non Aktif</th>
+    <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Trip Rute</th>
+    <th>Aktif</th><th>Non Aktif</th><th>Vendor Non Aktif</th>
     </tr></thead><tbody>`;
-  rows.forEach((r, i) => {
-    const id = `__route__${r.origin}|${r.tujuan}|${r.type}`;
-    const open = expandedVendor === id;
-    html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('${id.replace(/'/g,"\\'")}')">
-      <td class="caret">${open?'\u25be':'\u25b8'}</td>
+  rows.forEach(r => {
+    html += `<tr>
       <td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td>
       <td class="mono">${r.pulau||'-'}</td><td class="mono">${r.totalTrip}</td>
-      <td class="mono">${r.nAvl}</td><td class="mono">${r.nActive}</td>
-      <td class="mono"><b class="warnnum">${r.nInactive}</b></td></tr>`;
-    if (open) {
-      html += `<tr class="detailrow"><td colspan="9"><div class="detailwrap">
-        <div class="detailhdr">Vendor AVL non-aktif di <b>${r.origin} → ${r.tujuan} (${r.type})</b></div>
-        <div class="chips">${r.inactive.map(v => `<span class="chip">${v}</span>`).join('')}</div>
-        </div></td></tr>`;
-    }
+      <td class="mono">${r.nActive}</td><td class="mono"><b class="warnnum">${r.nInactive}</b></td>
+      <td><div class="chips inline">${r.inactive.map(v => `<span class="chip">${v}</span>`).join('')}</div></td>
+    </tr>`;
   });
   return html + '</tbody></table></div>';
 }

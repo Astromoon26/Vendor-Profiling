@@ -171,3 +171,7 @@ tbody tr:hover{background:var(--panel-2)}
 .warnnum{color:var(--red)}
 .chips{display:flex;flex-wrap:wrap;gap:7px;padding:4px 0}
 .chip{font-family:var(--mono);font-size:12px;background:rgba(165,86,31,.2);color:#e0a878;border:1px solid var(--nonavl);border-radius:4px;padding:4px 10px}
+
+/* ---- Chips inline dalam sel tabel per-rute ---- */
+.vendortable.inactive td .chips.inline{max-width:640px;white-space:normal;gap:5px}
+.vendortable.inactive td:last-child{white-space:normal}
