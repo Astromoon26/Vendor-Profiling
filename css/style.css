@@ -122,3 +122,22 @@ tbody tr:hover{background:var(--panel-2)}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--teal);color:#0f1620;padding:12px 20px;border-radius:6px;font-weight:600;font-family:var(--mono);font-size:13px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s}
 .toast.show{opacity:1;transform:none}
 @media (max-width:640px){.controls{flex-direction:column;align-items:stretch}.ctrl select,.ctrl input{min-width:0;width:100%}}
+
+/* ---- Vendor expandable ---- */
+.vendortable .vrow{cursor:pointer}
+.vendortable .vrow:hover{background:var(--panel-2)}
+.vendortable .vrow.open{background:var(--panel-2)}
+.vendortable .caret{color:var(--amber);font-family:var(--mono);width:24px;text-align:center}
+.detailrow>td{padding:0!important;background:var(--bg)}
+.detailwrap{padding:14px 18px;border-bottom:2px solid var(--amber)}
+.detailhdr{font-family:var(--mono);font-size:11px;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+.detailhdr b{color:var(--amber)}
+.detailtable{width:100%;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.detailtable thead th{background:var(--bg);font-size:9px}
+.detailtable tbody tr:hover{background:var(--panel)}
+.detailtable tbody tr:last-child td{border-bottom:none}
+
+/* ---- Percentage input ---- */
+.pctinput{position:relative;display:inline-block}
+.pctinput input{width:64px;padding-right:20px!important;text-align:right}
+.pctinput span{position:absolute;right:7px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;color:var(--ink-dim);pointer-events:none}
