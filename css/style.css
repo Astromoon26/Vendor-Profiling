@@ -162,3 +162,12 @@ tbody tr:hover{background:var(--panel-2)}
 .detailtable th .arr{color:var(--amber);font-size:10px}
 .detailtable th .arr.dim{color:var(--ink-dim)}
 .detailhdr .muted{color:var(--ink-dim);font-weight:400}
+
+/* ---- Sub-nav (dropdown dalam tab Vendor) ---- */
+.subnav{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.subnav label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-dim)}
+.subnav select{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:8px 12px;font-family:var(--mono);font-size:13px;min-width:240px}
+.subnav select:focus{outline:2px solid var(--teal);outline-offset:-1px}
+.warnnum{color:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;padding:4px 0}
+.chip{font-family:var(--mono);font-size:12px;background:rgba(165,86,31,.2);color:#e0a878;border:1px solid var(--nonavl);border-radius:4px;padding:4px 10px}

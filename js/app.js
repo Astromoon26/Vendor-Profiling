@@ -3,7 +3,7 @@
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
 let DATA = null, MASTER = null, PRICE = null;
-let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master' };
+let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
 
 /* ---------- boot ---------- */
@@ -157,8 +157,29 @@ function applyDetailFilter(detail) {
   return rows;
 }
 function renderVendor() {
+  const sub = state.vendorSub || 'aktif';
+  const bar = `<div class="subnav">
+    <label>Tampilan</label>
+    <select id="vendorSubSel" onchange="setVendorSub(this.value)">
+      <option value="aktif" ${sub==='aktif'?'selected':''}>Vendor Aktif</option>
+      <optgroup label="Non Aktif">
+        <option value="inaktif_tujuan" ${sub==='inaktif_tujuan'?'selected':''}>0 Trip (semua tujuan)</option>
+        <option value="inaktif_rute" ${sub==='inaktif_rute'?'selected':''}>Per Rute (Origin × Tujuan × Type)</option>
+      </optgroup>
+    </select>
+  </div>`;
+  let body;
+  if (sub === 'inaktif_tujuan') body = renderVendorInactiveTujuan();
+  else if (sub === 'inaktif_rute') body = renderVendorInactiveRoute();
+  else body = renderVendorAktif();
+  return bar + body;
+}
+function setVendorSub(val) { state.vendorSub = val; expandedVendor = null; render(); }
+
+/* ---- Vendor Aktif ---- */
+function renderVendorAktif() {
   const vendors = computed.vendors.filter(v => matchSearch(v.vendor));
-  if (!vendors.length) return `<div class="empty">Tidak ada vendor.</div>`;
+  if (!vendors.length) return `<div class="empty">Tidak ada vendor aktif pada filter ini.</div>`;
   let html = `<div class="tablewrap"><table class="vendortable"><thead><tr>
     <th></th><th>#</th><th>Vendor</th><th>Total Trip</th><th>Rute Dilayani</th><th>Avg Skor Akhir</th>
     </tr></thead><tbody>`;
@@ -204,42 +225,73 @@ function renderVendor() {
       html += `</tbody></table></div></td></tr>`;
     }
   });
-  html += '</tbody></table></div>';
+  return html + '</tbody></table></div>';
+}
 
-  // ---- seksi vendor tidak aktif (AVL tapi 0 trip di window) ----
+/* ---- Non Aktif: 0 trip di semua tujuan (AVL, 0 trip di window) ---- */
+function renderVendorInactiveTujuan() {
   const inactive = (computed.inactiveVendors || []).filter(v =>
     matchSearch(v.vendor, ...v.routes.map(r => r.tujuan)));
-  html += `<div class="section-head">
-      <span class="dot red"></span> Vendor Tidak Aktif
-      <span class="muted">— terdaftar AVL, 0 trip di window ini (${computed.inactiveVendors.length} vendor)</span>
+  let html = `<div class="section-head">
+      <span class="dot red"></span> Vendor Non Aktif — 0 Trip
+      <span class="muted">— terdaftar AVL tapi 0 trip di seluruh tujuan pada window ini (${computed.inactiveVendors.length} vendor)</span>
     </div>`;
-  if (!inactive.length) {
-    html += `<div class="empty small">Tidak ada (atau tersaring oleh pencarian).</div>`;
-  } else {
-    html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
-      <th></th><th>Vendor</th><th>Rute AVL</th><th>Origin</th><th>Tujuan</th>
-      </tr></thead><tbody>`;
-    inactive.forEach(v => {
-      const open = expandedVendor === '__inactive__' + v.vendor;
-      const origins = Array.from(new Set(v.routes.map(r => r.origin))).length;
-      const dests = Array.from(new Set(v.routes.map(r => r.tujuan))).length;
-      html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('__inactive__${v.vendor.replace(/'/g,"\\'")}')">
-        <td class="caret">${open?'\u25be':'\u25b8'}</td>
-        <td class="mono"><b>${v.vendor}</b></td>
-        <td class="mono">${v.nRoute}</td><td class="mono">${origins}</td><td class="mono">${dests}</td></tr>`;
-      if (open) {
-        html += `<tr class="detailrow"><td colspan="5"><div class="detailwrap">
-          <div class="detailhdr">Rute AVL <b>${v.vendor}</b> — terdaftar tapi belum ada trip di window</div>
-          <table class="detailtable"><thead><tr><th>Origin</th><th>Tujuan</th><th>Type</th></tr></thead><tbody>`;
-        for (const r of v.routes) {
-          html += `<tr><td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td></tr>`;
-        }
-        html += `</tbody></table></div></td></tr>`;
+  if (!inactive.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh pencarian).</div>`;
+  html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
+    <th></th><th>Vendor</th><th>Rute AVL</th><th>Origin</th><th>Tujuan</th>
+    </tr></thead><tbody>`;
+  inactive.forEach(v => {
+    const open = expandedVendor === '__inactive__' + v.vendor;
+    const origins = Array.from(new Set(v.routes.map(r => r.origin))).length;
+    const dests = Array.from(new Set(v.routes.map(r => r.tujuan))).length;
+    html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('__inactive__${v.vendor.replace(/'/g,"\\'")}')">
+      <td class="caret">${open?'\u25be':'\u25b8'}</td>
+      <td class="mono"><b>${v.vendor}</b></td>
+      <td class="mono">${v.nRoute}</td><td class="mono">${origins}</td><td class="mono">${dests}</td></tr>`;
+    if (open) {
+      html += `<tr class="detailrow"><td colspan="5"><div class="detailwrap">
+        <div class="detailhdr">Rute AVL <b>${v.vendor}</b> — terdaftar tapi belum ada trip di window</div>
+        <table class="detailtable"><thead><tr><th>Origin</th><th>Tujuan</th><th>Type</th></tr></thead><tbody>`;
+      for (const r of v.routes) {
+        html += `<tr><td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td></tr>`;
       }
-    });
-    html += '</tbody></table></div>';
-  }
-  return html;
+      html += `</tbody></table></div></td></tr>`;
+    }
+  });
+  return html + '</tbody></table></div>';
+}
+
+/* ---- Non Aktif: per rute Origin × Tujuan × Type ---- */
+function renderVendorInactiveRoute() {
+  const rows = (computed.routeInactive || [])
+    .filter(filterPulau)
+    .filter(r => matchSearch(r.tujuan, r.origin, ...r.inactive));
+  let html = `<div class="section-head">
+      <span class="dot red"></span> Vendor Non Aktif — Per Rute
+      <span class="muted">— vendor terdaftar AVL di rute tsb tapi 0 trip di rute itu (window ini)</span>
+    </div>`;
+  if (!rows.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh filter).</div>`;
+  html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
+    <th></th><th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Trip Rute</th>
+    <th>AVL</th><th>Aktif</th><th>Non Aktif</th>
+    </tr></thead><tbody>`;
+  rows.forEach((r, i) => {
+    const id = `__route__${r.origin}|${r.tujuan}|${r.type}`;
+    const open = expandedVendor === id;
+    html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('${id.replace(/'/g,"\\'")}')">
+      <td class="caret">${open?'\u25be':'\u25b8'}</td>
+      <td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td>
+      <td class="mono">${r.pulau||'-'}</td><td class="mono">${r.totalTrip}</td>
+      <td class="mono">${r.nAvl}</td><td class="mono">${r.nActive}</td>
+      <td class="mono"><b class="warnnum">${r.nInactive}</b></td></tr>`;
+    if (open) {
+      html += `<tr class="detailrow"><td colspan="9"><div class="detailwrap">
+        <div class="detailhdr">Vendor AVL non-aktif di <b>${r.origin} → ${r.tujuan} (${r.type})</b></div>
+        <div class="chips">${r.inactive.map(v => `<span class="chip">${v}</span>`).join('')}</div>
+        </div></td></tr>`;
+    }
+  });
+  return html + '</tbody></table></div>';
 }
 
 /* ---------- Tab: Dominansi ---------- */

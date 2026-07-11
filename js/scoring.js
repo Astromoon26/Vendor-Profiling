@@ -145,7 +145,28 @@ const Scoring = (() => {
       .map(v => { v.routes.sort((a, b) => (a.tujuan+a.type).localeCompare(b.tujuan+b.type)); return v; })
       .sort((a, b) => b.nRoute - a.nRoute || a.vendor.localeCompare(b.vendor));
 
-    return { routes, vendors, inactiveVendors, windowMonths: [currentMonth - rolling + 1, currentMonth], tripCount: trips.length };
+    // non-aktif level rute: vendor AVL di rute (origin|tujuan|type) tapi 0 trip di rute itu pada window
+    const activeByRoute = {};
+    for (const t of trips) {
+      const k = `${t.o}|${t.t}|${t.ty}`;
+      (activeByRoute[k] = activeByRoute[k] || new Set()).add(t.v);
+    }
+    const routeInactive = [];
+    for (const k of Object.keys(data.avl)) {
+      const [o, t, ty] = k.split('|');
+      const avlV = data.avl[k];
+      const actSet = activeByRoute[k] || new Set();
+      const inact = avlV.filter(v => !actSet.has(v)).sort();
+      if (!inact.length) continue;
+      routeInactive.push({
+        origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
+        totalTrip: (byRoute[k] || []).length,
+        nAvl: avlV.length, nActive: actSet.size, nInactive: inact.length, inactive: inact
+      });
+    }
+    routeInactive.sort((a, b) => b.nInactive - a.nInactive || a.tujuan.localeCompare(b.tujuan) || a.origin.localeCompare(b.origin));
+
+    return { routes, vendors, inactiveVendors, routeInactive, windowMonths: [currentMonth - rolling + 1, currentMonth], tripCount: trips.length };
   }
 
   return { buildAll, scoreRoute, bandScore, priceScore, filterRolling };
