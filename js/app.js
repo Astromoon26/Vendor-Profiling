@@ -117,17 +117,42 @@ function renderRanking() {
   return html + '</tbody></table></div>';
 }
 
-/* ---------- Tab: POV Vendor ---------- */
+/* ---------- Tab: Vendor (ekspandable ke detail rute) ---------- */
+let expandedVendor = null;
+function toggleVendor(name) {
+  expandedVendor = (expandedVendor === name) ? null : name;
+  render();
+}
 function renderVendor() {
   const vendors = computed.vendors.filter(v => matchSearch(v.vendor));
   if (!vendors.length) return `<div class="empty">Tidak ada vendor.</div>`;
-  let html = `<div class="tablewrap"><table><thead><tr>
-    <th>#</th><th>Vendor</th><th>Total Trip</th><th>Rute Dilayani</th><th>Avg Skor Akhir</th>
+  let html = `<div class="tablewrap"><table class="vendortable"><thead><tr>
+    <th></th><th>#</th><th>Vendor</th><th>Total Trip</th><th>Rute Dilayani</th><th>Avg Skor Akhir</th>
     </tr></thead><tbody>`;
   vendors.forEach((v, i) => {
-    html += `<tr><td class="mono">${i+1}</td><td class="mono"><b>${v.vendor}</b></td>
+    const open = expandedVendor === v.vendor;
+    html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('${v.vendor.replace(/'/g,"\\'")}')">
+      <td class="caret">${open?'\u25be':'\u25b8'}</td>
+      <td class="mono">${i+1}</td><td class="mono"><b>${v.vendor}</b></td>
       <td class="mono">${v.trip.toLocaleString()}</td><td class="mono">${v.routes}</td>
       <td class="final">${v.avgFinal.toFixed(2)}</td></tr>`;
+    if (open) {
+      html += `<tr class="detailrow"><td colspan="6"><div class="detailwrap">
+        <div class="detailhdr">Detail rute <b>${v.vendor}</b> — skor mentah (sebelum pembobotan)</div>
+        <table class="detailtable"><thead><tr>
+          <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th><th>Trip</th><th>Share</th>
+          <th>Avail</th><th>Fulfill</th><th>OTA</th><th>Price</th>
+        </tr></thead><tbody>`;
+      for (const d of v.detail) {
+        html += `<tr>
+          <td class="mono">${d.origin}</td><td><b>${d.tujuan}</b></td><td class="mono">${d.type}</td>
+          <td class="mono">${d.pulau||'-'}</td><td>${tag(d.isAvl)}</td>
+          <td class="mono">${d.trip}</td><td class="mono">${pct(d.share)}</td>
+          <td>${sc(d.scoreAvail)}</td><td>${sc(d.scoreFul)}</td><td>${sc(d.scoreOta)}</td><td>${sc(d.scorePrice)}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div></td></tr>`;
+    }
   });
   return html + '</tbody></table></div>';
 }
@@ -166,16 +191,17 @@ function renderDominansi() {
 }
 
 /* ---------- Tab: Master Scoring editor ---------- */
+function pctVal(x) { return Math.round(x * 1000) / 10; } // 0.505 -> 50.5
 function bandEditor(title, key) {
   const bands = MASTER[key];
   let rows = bands.map((b, i) => `<tr>
     <td>${sc(b.score)}</td>
-    <td><input type="number" step="0.01" min="0" max="1" value="${b.min}" data-k="${key}" data-i="${i}" data-f="min"></td>
-    <td><input type="number" step="0.01" min="0" max="1.01" value="${b.max}" data-k="${key}" data-i="${i}" data-f="max"></td>
+    <td><div class="pctinput"><input type="number" step="1" min="0" max="100" value="${pctVal(b.min)}" data-k="${key}" data-i="${i}" data-f="min"><span>%</span></div></td>
+    <td><div class="pctinput"><input type="number" step="1" min="0" max="101" value="${pctVal(b.max)}" data-k="${key}" data-i="${i}" data-f="max"><span>%</span></div></td>
   </tr>`).join('');
   return `<div class="editcard"><h3>${title}</h3>
     <table><thead><tr><th>Skor</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="note">Ambang berbasis proporsi (0\u20131). Contoh 0.5 = 50%. Max eksklusif.</p></div>`;
+    <p class="note">Ambang dalam persen. Contoh 50 = 50%. Batas atas (Max) bersifat eksklusif.</p></div>`;
 }
 function renderMaster() {
   const w = MASTER.weights;
@@ -202,7 +228,8 @@ function renderMaster() {
 /* ---------- master actions ---------- */
 function collectMasterEdits() {
   document.querySelectorAll('input[data-k]').forEach(inp => {
-    const { k, i, f } = inp.dataset; MASTER[k][+i][f] = parseFloat(inp.value);
+    const { k, i, f } = inp.dataset;
+    MASTER[k][+i][f] = (parseFloat(inp.value) || 0) / 100; // persen -> proporsi
   });
   document.querySelectorAll('input[data-w]').forEach(inp => {
     MASTER.weights[inp.dataset.w] = parseFloat(inp.value) || 0;

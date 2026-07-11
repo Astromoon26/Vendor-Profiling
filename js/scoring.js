@@ -108,19 +108,26 @@ const Scoring = (() => {
       const pmap = priceData ? (priceData[k] || null) : null;
       const res = scoreRoute(byRoute[k], avlV, master, pmap);
       routes.push({ origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, total: res.total, rows: res.rows });
-      // agregasi POV vendor
+      // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
         if (r.trip === 0) continue;
-        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0 };
+        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0, detail: [] };
         vendorAgg[r.vendor].trip += r.trip;
         vendorAgg[r.vendor].routes += 1;
         vendorAgg[r.vendor].sumFinal += r.finalScore;
+        vendorAgg[r.vendor].detail.push({
+          origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
+          trip: r.trip, share: r.share, isAvl: r.isAvl,
+          scoreAvail: r.scoreAvail, scoreFul: r.scoreFul, scoreOta: r.scoreOta, scorePrice: r.scorePrice,
+          finalScore: r.finalScore
+        });
       }
     }
-    // rata2 skor akhir per vendor
-    const vendors = Object.values(vendorAgg).map(v => ({
-      ...v, avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0
-    })).sort((a, b) => b.avgFinal - a.avgFinal || b.trip - a.trip);
+    // rata2 skor akhir per vendor + urutkan detail (trip desc)
+    const vendors = Object.values(vendorAgg).map(v => {
+      v.detail.sort((a, b) => b.trip - a.trip);
+      return { ...v, avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0 };
+    }).sort((a, b) => b.avgFinal - a.avgFinal || b.trip - a.trip);
 
     return { routes, vendors, windowMonths: [currentMonth - rolling + 1, currentMonth], tripCount: trips.length };
   }
