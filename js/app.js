@@ -3,7 +3,7 @@
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
 let DATA = null, MASTER = null, PRICE = null;
-let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'ranking' };
+let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master' };
 let computed = null;
 
 /* ---------- boot ---------- */
@@ -124,9 +124,37 @@ function renderRanking() {
 
 /* ---------- Tab: Vendor (ekspandable ke detail rute) ---------- */
 let expandedVendor = null;
+// state filter/sort untuk detail vendor yang sedang terbuka
+let detailFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
 function toggleVendor(name) {
+  const changing = expandedVendor !== name;
   expandedVendor = (expandedVendor === name) ? null : name;
+  if (changing) detailFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
   render();
+}
+function setDetail(field, val) { detailFilter[field] = val; render(); }
+function sortDetail(key) {
+  if (detailFilter.sortKey === key) detailFilter.sortDir = detailFilter.sortDir === 'desc' ? 'asc' : 'desc';
+  else { detailFilter.sortKey = key; detailFilter.sortDir = 'desc'; }
+  render();
+}
+function sortArrow(key) {
+  if (detailFilter.sortKey !== key) return '<span class="arr dim">\u2195</span>';
+  return detailFilter.sortDir === 'desc' ? '<span class="arr">\u25be</span>' : '<span class="arr">\u25b4</span>';
+}
+function applyDetailFilter(detail) {
+  const f = detailFilter;
+  let rows = detail.filter(d =>
+    (!f.origin || d.origin === f.origin) &&
+    (!f.tujuan || d.tujuan === f.tujuan) &&
+    (!f.type || d.type === f.type) &&
+    (!f.qOrigin || d.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
+    (!f.qTujuan || d.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
+  );
+  const keyMap = { trip:'trip', share:'share', avail:'scoreAvail', fulfill:'scoreFul', ota:'scoreOta', price:'scorePrice' };
+  const k = keyMap[f.sortKey] || 'trip';
+  rows.sort((a, b) => f.sortDir === 'desc' ? b[k] - a[k] : a[k] - b[k]);
+  return rows;
 }
 function renderVendor() {
   const vendors = computed.vendors.filter(v => matchSearch(v.vendor));
@@ -142,13 +170,30 @@ function renderVendor() {
       <td class="mono">${v.trip.toLocaleString()}</td><td class="mono">${v.routes}</td>
       <td class="final">${v.avgFinal.toFixed(2)}</td></tr>`;
     if (open) {
-      html += `<tr class="detailrow"><td colspan="6"><div class="detailwrap">
-        <div class="detailhdr">Detail rute <b>${v.vendor}</b> — skor mentah (sebelum pembobotan)</div>
+      const origins = Array.from(new Set(v.detail.map(d => d.origin))).sort();
+      const tujuans = Array.from(new Set(v.detail.map(d => d.tujuan))).sort();
+      const types = Array.from(new Set(v.detail.map(d => d.type))).sort();
+      const opt = (arr, sel) => ['<option value="">Semua</option>']
+        .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+      const rows = applyDetailFilter(v.detail);
+      const shead = (label, key) => `<th class="sortable" onclick="event.stopPropagation();sortDetail('${key}')">${label} ${sortArrow(key)}</th>`;
+      html += `<tr class="detailrow"><td colspan="6"><div class="detailwrap" onclick="event.stopPropagation()">
+        <div class="detailhdr">Detail rute <b>${v.vendor}</b> — skor mentah (sebelum pembobotan) · <span class="muted">${rows.length}/${v.detail.length} rute</span></div>
+        <div class="detailtoolbar">
+          <div class="fld"><label>Cari Origin</label><input type="text" value="${detailFilter.qOrigin}" oninput="setDetail('qOrigin',this.value)" placeholder="ketik…"></div>
+          <div class="fld"><label>Origin</label><select onchange="setDetail('origin',this.value)">${opt(origins,detailFilter.origin)}</select></div>
+          <div class="fld"><label>Cari Tujuan</label><input type="text" value="${detailFilter.qTujuan}" oninput="setDetail('qTujuan',this.value)" placeholder="ketik…"></div>
+          <div class="fld"><label>Tujuan</label><select onchange="setDetail('tujuan',this.value)">${opt(tujuans,detailFilter.tujuan)}</select></div>
+          <div class="fld"><label>Type Armada</label><select onchange="setDetail('type',this.value)">${opt(types,detailFilter.type)}</select></div>
+        </div>
         <table class="detailtable"><thead><tr>
-          <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th><th>Trip</th><th>Share</th>
-          <th>Avail</th><th>Fulfill</th><th>OTA</th><th>Price</th>
+          <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th>
+          ${shead('Trip','trip')}${shead('Share','share')}
+          ${shead('Avail','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('Price','price')}
         </tr></thead><tbody>`;
-      for (const d of v.detail) {
+      if (!rows.length) {
+        html += `<tr><td colspan="11" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
+      } else for (const d of rows) {
         html += `<tr>
           <td class="mono">${d.origin}</td><td><b>${d.tujuan}</b></td><td class="mono">${d.type}</td>
           <td class="mono">${d.pulau||'-'}</td><td>${tag(d.isAvl)}</td>
@@ -304,6 +349,13 @@ function toast(msg) {
 
 /* ---------- render router ---------- */
 function render() {
+  // simpan fokus & posisi kursor input toolbar detail (agar ketik tak terputus)
+  const act = document.activeElement;
+  let focusInfo = null;
+  if (act && act.tagName === 'INPUT' && act.closest('.detailtoolbar')) {
+    const lbl = act.closest('.fld')?.querySelector('label')?.textContent || '';
+    focusInfo = { lbl, start: act.selectionStart, end: act.selectionEnd };
+  }
   renderKpis();
   const view = document.getElementById('view');
   const kpiEl = document.getElementById('kpis');
@@ -312,6 +364,17 @@ function render() {
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
+  // pulihkan fokus
+  if (focusInfo) {
+    const flds = document.querySelectorAll('.detailtoolbar .fld');
+    for (const f of flds) {
+      if (f.querySelector('label')?.textContent === focusInfo.lbl) {
+        const inp = f.querySelector('input');
+        if (inp) { inp.focus(); try { inp.setSelectionRange(focusInfo.start, focusInfo.end); } catch {} }
+        break;
+      }
+    }
+  }
 }
 
 boot();

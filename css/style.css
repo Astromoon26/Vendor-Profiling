@@ -150,3 +150,15 @@ tbody tr:hover{background:var(--panel-2)}
 .vendortable.inactive .vrow td{color:var(--ink-dim)}
 .vendortable.inactive .vrow b{color:var(--ink)}
 .empty.small{padding:20px;font-size:12px}
+
+/* ---- Detail toolbar (filter di dalam expand vendor) ---- */
+.detailtoolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;padding:12px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px}
+.detailtoolbar .fld{display:flex;flex-direction:column;gap:4px}
+.detailtoolbar label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-dim)}
+.detailtoolbar input,.detailtoolbar select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 9px;font-family:var(--mono);font-size:12px;min-width:130px}
+.detailtoolbar input:focus,.detailtoolbar select:focus{outline:2px solid var(--teal);outline-offset:-1px}
+.detailtable th.sortable{cursor:pointer;user-select:none;white-space:nowrap}
+.detailtable th.sortable:hover{color:var(--amber)}
+.detailtable th .arr{color:var(--amber);font-size:10px}
+.detailtable th .arr.dim{color:var(--ink-dim)}
+.detailhdr .muted{color:var(--ink-dim);font-weight:400}
