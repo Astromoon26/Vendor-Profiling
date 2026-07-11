@@ -84,6 +84,11 @@ function renderKpis() {
     { k: 'Avg Skor Akhir', v: avgFinal.toFixed(2), c: 'amber' },
     { k: 'Rute Monopoli', v: mono, c: mono > 0 ? 'red' : '' },
   ];
+  // di tab Vendor, ganti kartu terakhir jadi Vendor Tidak Aktif (AVL tapi 0 trip di window)
+  if (state.tab === 'vendor') {
+    const nInactive = (computed.inactiveVendors || []).length;
+    cards[3] = { k: 'Vendor Tidak Aktif', v: nInactive, c: nInactive > 0 ? 'red' : '' };
+  }
   document.getElementById('kpis').innerHTML = cards.map(c =>
     `<div class="kpi"><div class="k">${c.k}</div><div class="v ${c.c}">${c.v}</div></div>`).join('');
 }
@@ -154,7 +159,42 @@ function renderVendor() {
       html += `</tbody></table></div></td></tr>`;
     }
   });
-  return html + '</tbody></table></div>';
+  html += '</tbody></table></div>';
+
+  // ---- seksi vendor tidak aktif (AVL tapi 0 trip di window) ----
+  const inactive = (computed.inactiveVendors || []).filter(v =>
+    matchSearch(v.vendor, ...v.routes.map(r => r.tujuan)));
+  html += `<div class="section-head">
+      <span class="dot red"></span> Vendor Tidak Aktif
+      <span class="muted">— terdaftar AVL, 0 trip di window ini (${computed.inactiveVendors.length} vendor)</span>
+    </div>`;
+  if (!inactive.length) {
+    html += `<div class="empty small">Tidak ada (atau tersaring oleh pencarian).</div>`;
+  } else {
+    html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
+      <th></th><th>Vendor</th><th>Rute AVL</th><th>Origin</th><th>Tujuan</th>
+      </tr></thead><tbody>`;
+    inactive.forEach(v => {
+      const open = expandedVendor === '__inactive__' + v.vendor;
+      const origins = Array.from(new Set(v.routes.map(r => r.origin))).length;
+      const dests = Array.from(new Set(v.routes.map(r => r.tujuan))).length;
+      html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('__inactive__${v.vendor.replace(/'/g,"\\'")}')">
+        <td class="caret">${open?'\u25be':'\u25b8'}</td>
+        <td class="mono"><b>${v.vendor}</b></td>
+        <td class="mono">${v.nRoute}</td><td class="mono">${origins}</td><td class="mono">${dests}</td></tr>`;
+      if (open) {
+        html += `<tr class="detailrow"><td colspan="5"><div class="detailwrap">
+          <div class="detailhdr">Rute AVL <b>${v.vendor}</b> — terdaftar tapi belum ada trip di window</div>
+          <table class="detailtable"><thead><tr><th>Origin</th><th>Tujuan</th><th>Type</th></tr></thead><tbody>`;
+        for (const r of v.routes) {
+          html += `<tr><td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td></tr>`;
+        }
+        html += `</tbody></table></div></td></tr>`;
+      }
+    });
+    html += '</tbody></table></div>';
+  }
+  return html;
 }
 
 /* ---------- Tab: Dominansi ---------- */

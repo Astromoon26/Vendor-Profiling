@@ -129,7 +129,23 @@ const Scoring = (() => {
       return { ...v, avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0 };
     }).sort((a, b) => b.avgFinal - a.avgFinal || b.trip - a.trip);
 
-    return { routes, vendors, windowMonths: [currentMonth - rolling + 1, currentMonth], tripCount: trips.length };
+    // vendor tidak aktif: terdaftar di AVL tapi 0 trip di window ini
+    const activeSet = new Set(Object.keys(vendorAgg));
+    const inactiveMap = {}; // vendor -> {vendor, routes:[{origin,tujuan,type}], nRoute}
+    for (const k of Object.keys(data.avl)) {
+      const [o, t, ty] = k.split('|');
+      for (const v of data.avl[k]) {
+        if (activeSet.has(v)) continue;              // masih aktif di suatu rute -> lewati
+        if (!inactiveMap[v]) inactiveMap[v] = { vendor: v, nRoute: 0, routes: [] };
+        inactiveMap[v].nRoute++;
+        inactiveMap[v].routes.push({ origin: o, tujuan: t, type: ty });
+      }
+    }
+    const inactiveVendors = Object.values(inactiveMap)
+      .map(v => { v.routes.sort((a, b) => (a.tujuan+a.type).localeCompare(b.tujuan+b.type)); return v; })
+      .sort((a, b) => b.nRoute - a.nRoute || a.vendor.localeCompare(b.vendor));
+
+    return { routes, vendors, inactiveVendors, windowMonths: [currentMonth - rolling + 1, currentMonth], tripCount: trips.length };
   }
 
   return { buildAll, scoreRoute, bandScore, priceScore, filterRolling };
