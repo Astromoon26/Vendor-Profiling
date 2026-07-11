@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vendor Scoring — Freight Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark">CARGOSCORE</span>
+    <span class="sub">Vendor Performance Terminal</span>
+  </div>
+  <div class="spacer"></div>
+  <div class="window-pill" id="windowPill">window: <b>—</b></div>
+</header>
+
+<section class="controls">
+  <div class="ctrl">
+    <label>Bulan Acuan</label>
+    <select id="monthSel"></select>
+  </div>
+  <div class="ctrl">
+    <label>Rolling (bulan)</label>
+    <select id="rollingSel">
+      <option value="1">1</option><option value="2">2</option>
+      <option value="3" selected>3</option>
+    </select>
+  </div>
+  <div class="ctrl">
+    <label>Pulau</label>
+    <select id="pulauSel"><option value="">Semua</option></select>
+  </div>
+  <div class="ctrl">
+    <label>Cari (tujuan / vendor)</label>
+    <input type="text" id="searchBox" placeholder="ketik untuk filter…">
+  </div>
+</section>
+
+<nav class="tabs">
+  <div class="tab active" data-tab="ranking">Ranking Rute</div>
+  <div class="tab" data-tab="vendor">POV Vendor</div>
+  <div class="tab" data-tab="dominansi">Dominansi</div>
+  <div class="tab" data-tab="master">Master Scoring</div>
+</nav>
+
+<main class="wrap">
+  <div class="kpis" id="kpis"></div>
+  <div id="view"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/scoring.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

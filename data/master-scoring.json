@@ -1,0 +1,43 @@
+{
+  "_comment": "Master Scoring default. Bisa diubah lewat dashboard; perubahan tersimpan di localStorage. Export & commit file ini untuk jadikan default baru bagi seluruh tim.",
+  "version": 1,
+  "rollingMonths": 3,
+  "availability": [
+    { "score": 5, "min": 0.50, "max": 1.01, "label": "\u2265 50%" },
+    { "score": 4, "min": 0.40, "max": 0.50, "label": "40% \u2013 <50%" },
+    { "score": 3, "min": 0.30, "max": 0.40, "label": "30% \u2013 <40%" },
+    { "score": 2, "min": 0.20, "max": 0.30, "label": "20% \u2013 <30%" },
+    { "score": 1, "min": 0.0001, "max": 0.20, "label": "0% \u2013 <20%" },
+    { "score": 0, "min": 0, "max": 0.0001, "label": "0%" }
+  ],
+  "fulfillment": [
+    { "score": 5, "min": 0.90, "max": 1.01, "label": "\u2265 90%" },
+    { "score": 4, "min": 0.85, "max": 0.90, "label": "85% \u2013 <90%" },
+    { "score": 3, "min": 0.80, "max": 0.85, "label": "80% \u2013 <85%" },
+    { "score": 2, "min": 0.75, "max": 0.80, "label": "75% \u2013 <80%" },
+    { "score": 1, "min": 0.0001, "max": 0.75, "label": "0% \u2013 <75%" },
+    { "score": 0, "min": 0, "max": 0.0001, "label": "0%" }
+  ],
+  "ota": [
+    { "score": 5, "min": 0.80, "max": 1.01, "label": "\u2265 80%" },
+    { "score": 4, "min": 0.75, "max": 0.80, "label": "75% \u2013 <80%" },
+    { "score": 3, "min": 0.70, "max": 0.75, "label": "70% \u2013 <75%" },
+    { "score": 2, "min": 0.65, "max": 0.70, "label": "65% \u2013 <70%" },
+    { "score": 1, "min": 0.0001, "max": 0.65, "label": "0% \u2013 <65%" },
+    { "score": 0, "min": 0, "max": 0.0001, "label": "0%" }
+  ],
+  "price": {
+    "_comment": "Price di-score relatif per rute: range min-max dibagi 5 interval. Termurah=5, termahal=1, tanpa harga=0.",
+    "intervals": 5,
+    "cheapestScore": 5,
+    "labels": { "5": "Murah", "4": "Menengah Murah", "3": "Menengah", "2": "Menengah Mahal", "1": "Mahal", "0": "Non AVL / Tidak ada harga" }
+  },
+  "weights": {
+    "_comment": "Bobot untuk skor akhir gabungan. Ubah sesuai prioritas. Total idealnya 100.",
+    "availability": 20,
+    "fulfillment": 30,
+    "ota": 30,
+    "price": 20,
+    "ordering": 0
+  }
+}
