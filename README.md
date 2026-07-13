@@ -67,3 +67,4 @@ Dashboard otomatis pakai data terbaru. Bulan acuan bisa dipilih di kontrol atas;
 ## Aturan bisnis yang tertanam
 
 Sinkron dengan workbook Excel: RPL→TEL, BIG MAMA→WINGBOX, Surabaya→Sidoarjo, Jogja→Yogyakarta, Banyumas→Purwokerto, dan mapping Area→Pulau. Ubah di `scripts/build_data.py` bila aturan berubah.
+test
