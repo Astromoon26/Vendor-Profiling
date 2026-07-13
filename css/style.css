@@ -175,3 +175,12 @@ tbody tr:hover{background:var(--panel-2)}
 /* ---- Chips inline dalam sel tabel per-rute ---- */
 .vendortable.inactive td .chips.inline{max-width:640px;white-space:normal;gap:5px}
 .vendortable.inactive td:last-child{white-space:normal}
+
+/* ---- Badge % aktif per rute ---- */
+.pctbadge{display:inline-block;padding:3px 8px;border-radius:4px;font-weight:700;font-size:12px}
+.pctbadge.good{background:rgba(74,158,110,.18);color:#5fbf87;border:1px solid #3d7d55}
+.pctbadge.mid{background:rgba(191,144,0,.18);color:#d4a017;border:1px solid #9a7512}
+.pctbadge.low{background:rgba(192,57,43,.18);color:#e06552;border:1px solid #a13a2e}
+
+/* ---- Toolbar filter di tab Route ---- */
+.detailtoolbar.routebar{margin-bottom:18px}

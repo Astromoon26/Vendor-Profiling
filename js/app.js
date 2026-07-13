@@ -94,12 +94,41 @@ function renderKpis() {
 }
 
 /* ---------- Tab: Ranking Rute ---------- */
+/* ---------- Tab: Route ---------- */
+let routeFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '' };
+function setRoute(field, val) { routeFilter[field] = val; render(); }
 function renderRanking() {
-  const routes = computed.routes.filter(filterPulau)
-    .filter(r => matchSearch(r.tujuan, r.origin, ...r.rows.map(x => x.vendor)))
-    .sort((a, b) => b.total - a.total);
-  if (!routes.length) return `<div class="empty">Tidak ada rute pada filter ini.</div>`;
-  let html = `<div class="tablewrap"><table><thead><tr>
+  const f = routeFilter;
+  // hanya vendor yang punya trip
+  let routes = computed.routes.filter(filterPulau)
+    .map(r => ({ ...r, rows: r.rows.filter(x => x.trip > 0) }))
+    .filter(r => r.rows.length > 0);
+  // opsi dropdown dari data yang ada
+  const origins = Array.from(new Set(routes.map(r => r.origin))).sort();
+  const tujuans = Array.from(new Set(routes.map(r => r.tujuan))).sort();
+  const types = Array.from(new Set(routes.map(r => r.type))).sort();
+  // terapkan filter toolbar + search global
+  routes = routes.filter(r =>
+    (!f.origin || r.origin === f.origin) &&
+    (!f.tujuan || r.tujuan === f.tujuan) &&
+    (!f.type || r.type === f.type) &&
+    (!f.qOrigin || r.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
+    (!f.qTujuan || r.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
+  ).filter(r => matchSearch(r.tujuan, r.origin, ...r.rows.map(x => x.vendor)))
+   .sort((a, b) => b.total - a.total);
+
+  const opt = (arr, sel) => ['<option value="">Semua</option>']
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Cari Origin</label><input type="text" value="${f.qOrigin}" oninput="setRoute('qOrigin',this.value)" placeholder="ketik…"></div>
+    <div class="fld"><label>Origin</label><select onchange="setRoute('origin',this.value)">${opt(origins,f.origin)}</select></div>
+    <div class="fld"><label>Cari Tujuan</label><input type="text" value="${f.qTujuan}" oninput="setRoute('qTujuan',this.value)" placeholder="ketik…"></div>
+    <div class="fld"><label>Tujuan</label><select onchange="setRoute('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
+    <div class="fld"><label>Type Armada</label><select onchange="setRoute('type',this.value)">${opt(types,f.type)}</select></div>
+  </div>`;
+
+  if (!routes.length) return toolbar + `<div class="empty">Tidak ada rute pada filter ini.</div>`;
+  let html = toolbar + `<div class="tablewrap"><table><thead><tr>
     <th>Origin</th><th>Tujuan</th><th>Type</th><th>Trip</th>
     <th>Vendor</th><th>Status</th><th>Share</th>
     <th>Avail</th><th>Fulfill</th><th>OTA</th><th>Price</th><th>Skor Akhir</th>
@@ -113,9 +142,9 @@ function renderRanking() {
                      <td class="mono" rowspan="${r.rows.length}">${r.total}</td>` : ''}
         <td class="mono">${v.vendor}</td>
         <td>${tag(v.isAvl)}</td>
-        <td class="mono">${v.trip>0?pct(v.share):'—'}</td>
+        <td class="mono">${pct(v.share)}</td>
         <td>${sc(v.scoreAvail)}</td><td>${sc(v.scoreFul)}</td><td>${sc(v.scoreOta)}</td><td>${sc(v.scorePrice)}</td>
-        <td class="final">${v.trip>0?v.finalScore.toFixed(2):'—'}</td>
+        <td class="final">${v.finalScore.toFixed(2)}</td>
       </tr>`;
     });
   }
@@ -274,13 +303,17 @@ function renderVendorInactiveRoute() {
   if (!rows.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh filter).</div>`;
   html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
     <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Trip Rute</th>
-    <th>Aktif</th><th>Non Aktif</th><th>Vendor Non Aktif</th>
+    <th>Total Vendor</th><th>Aktif</th><th>Non Aktif</th><th>% Aktif</th><th>Vendor Non Aktif</th>
     </tr></thead><tbody>`;
   rows.forEach(r => {
+    const p = r.pctActive;
+    const pcls = p >= 0.5 ? 'good' : (p >= 0.25 ? 'mid' : 'low');
     html += `<tr>
       <td class="mono">${r.origin}</td><td><b>${r.tujuan}</b></td><td class="mono">${r.type}</td>
       <td class="mono">${r.pulau||'-'}</td><td class="mono">${r.totalTrip}</td>
-      <td class="mono">${r.nActive}</td><td class="mono"><b class="warnnum">${r.nInactive}</b></td>
+      <td class="mono">${r.totalVendor}</td><td class="mono">${r.nActive}</td>
+      <td class="mono"><b class="warnnum">${r.nInactive}</b></td>
+      <td class="mono"><span class="pctbadge ${pcls}">${pct(p)}</span></td>
       <td><div class="chips inline">${r.inactive.map(v => `<span class="chip">${v}</span>`).join('')}</div></td>
     </tr>`;
   });

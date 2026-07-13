@@ -158,10 +158,13 @@ const Scoring = (() => {
       const actSet = activeByRoute[k] || new Set();
       const inact = avlV.filter(v => !actSet.has(v)).sort();
       if (!inact.length) continue;
+      const totalVendor = new Set([...avlV, ...actSet]).size;  // keseluruhan vendor melayani rute
       routeInactive.push({
         origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
         totalTrip: (byRoute[k] || []).length,
-        nAvl: avlV.length, nActive: actSet.size, nInactive: inact.length, inactive: inact
+        nAvl: avlV.length, nActive: actSet.size, nInactive: inact.length,
+        totalVendor, pctActive: totalVendor ? actSet.size / totalVendor : 0,
+        inactive: inact
       });
     }
     routeInactive.sort((a, b) => b.nInactive - a.nInactive || a.tujuan.localeCompare(b.tujuan) || a.origin.localeCompare(b.origin));
