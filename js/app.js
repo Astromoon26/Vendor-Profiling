@@ -3,6 +3,7 @@
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
 let DATA = null, MASTER = null, PRICE = null;
+let naFilter = { origin: '', tujuan: '', qOrigin: '', qTujuan: '' };
 let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
 
@@ -203,7 +204,7 @@ function renderVendor() {
   else body = renderVendorAktif();
   return bar + body;
 }
-function setVendorSub(val) { state.vendorSub = val; expandedVendor = null; render(); }
+function setVendorSub(val) { state.vendorSub = val; expandedVendor = null; naFilter = { origin:'', tujuan:'', qOrigin:'', qTujuan:'' }; render(); }
 
 /* ---- Vendor Aktif ---- */
 function renderVendorAktif() {
@@ -258,14 +259,37 @@ function renderVendorAktif() {
 }
 
 /* ---- Non Aktif: 0 trip di semua tujuan (AVL, 0 trip di window) ---- */
+function setNa(field, val) { naFilter[field] = val; render(); }
+function naToolbar(origins, tujuans) {
+  const f = naFilter;
+  const opt = (arr, sel) => ['<option value="">Semua</option>']
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  return `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Cari Origin</label><input type="text" value="${f.qOrigin}" oninput="setNa('qOrigin',this.value)" placeholder="ketik…"></div>
+    <div class="fld"><label>Origin</label><select onchange="setNa('origin',this.value)">${opt(origins,f.origin)}</select></div>
+    <div class="fld"><label>Cari Tujuan</label><input type="text" value="${f.qTujuan}" oninput="setNa('qTujuan',this.value)" placeholder="ketik…"></div>
+    <div class="fld"><label>Tujuan</label><select onchange="setNa('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
+  </div>`;
+}
+function naRouteMatch(r) {
+  const f = naFilter;
+  return (!f.origin || r.origin === f.origin) &&
+         (!f.tujuan || r.tujuan === f.tujuan) &&
+         (!f.qOrigin || r.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
+         (!f.qTujuan || r.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()));
+}
 function renderVendorInactiveTujuan() {
-  const inactive = (computed.inactiveVendors || []).filter(v =>
-    matchSearch(v.vendor, ...v.routes.map(r => r.tujuan)));
-  let html = `<div class="section-head">
+  const allOrigins = Array.from(new Set((computed.inactiveVendors||[]).flatMap(v => v.routes.map(r => r.origin)))).sort();
+  const allTujuans = Array.from(new Set((computed.inactiveVendors||[]).flatMap(v => v.routes.map(r => r.tujuan)))).sort();
+  const inactive = (computed.inactiveVendors || [])
+    .map(v => ({ ...v, routes: v.routes.filter(naRouteMatch) }))
+    .filter(v => v.routes.length > 0)
+    .filter(v => matchSearch(v.vendor, ...v.routes.map(r => r.tujuan)));
+  let html = naToolbar(allOrigins, allTujuans) + `<div class="section-head">
       <span class="dot red"></span> Vendor Non Aktif — 0 Trip
-      <span class="muted">— terdaftar AVL tapi 0 trip di seluruh tujuan pada window ini (${computed.inactiveVendors.length} vendor)</span>
+      <span class="muted">— terdaftar AVL tapi 0 trip di seluruh tujuan pada window ini</span>
     </div>`;
-  if (!inactive.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh pencarian).</div>`;
+  if (!inactive.length) return html + `<div class="empty small">Tidak ada (atau tersaring oleh filter).</div>`;
   html += `<div class="tablewrap"><table class="vendortable inactive"><thead><tr>
     <th></th><th>Vendor</th><th>Rute AVL</th><th>Origin</th><th>Tujuan</th>
     </tr></thead><tbody>`;
@@ -276,7 +300,7 @@ function renderVendorInactiveTujuan() {
     html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('__inactive__${v.vendor.replace(/'/g,"\\'")}')">
       <td class="caret">${open?'\u25be':'\u25b8'}</td>
       <td class="mono"><b>${v.vendor}</b></td>
-      <td class="mono">${v.nRoute}</td><td class="mono">${origins}</td><td class="mono">${dests}</td></tr>`;
+      <td class="mono">${v.routes.length}</td><td class="mono">${origins}</td><td class="mono">${dests}</td></tr>`;
     if (open) {
       html += `<tr class="detailrow"><td colspan="5"><div class="detailwrap">
         <div class="detailhdr">Rute AVL <b>${v.vendor}</b> — terdaftar tapi belum ada trip di window</div>
@@ -292,11 +316,13 @@ function renderVendorInactiveTujuan() {
 
 /* ---- Non Aktif: per rute Origin × Tujuan × Type ---- */
 function renderVendorInactiveRoute() {
-  const rows = (computed.routeInactive || [])
-    .filter(r => r.totalTrip > 0)                    // hanya rute yang ADA trip
-    .filter(filterPulau)
+  const base = (computed.routeInactive || []).filter(r => r.totalTrip > 0).filter(filterPulau);
+  const allOrigins = Array.from(new Set(base.map(r => r.origin))).sort();
+  const allTujuans = Array.from(new Set(base.map(r => r.tujuan))).sort();
+  const rows = base
+    .filter(naRouteMatch)
     .filter(r => matchSearch(r.tujuan, r.origin, ...r.inactive));
-  let html = `<div class="section-head">
+  let html = naToolbar(allOrigins, allTujuans) + `<div class="section-head">
       <span class="dot red"></span> Vendor Non Aktif — Per Rute
       <span class="muted">— vendor terdaftar AVL di rute yang ada trip, tapi 0 trip di rute itu (window ini)</span>
     </div>`;
@@ -326,18 +352,19 @@ let expandedDom = null;
 function setDom(field, val) { domFilter[field] = val; render(); }
 function toggleDom(key) { expandedDom = (expandedDom === key) ? null : key; render(); }
 function renderDominansi() {
-  // agregasi per pulau x tujuan (+ breakdown per type armada)
+  // agregasi per pulau x tujuan (+ breakdown per origin x type armada)
   const agg = {};
   for (const r of computed.routes.filter(filterPulau)) {
     const key = `${r.pulau||'-'}|${r.tujuan}`;
-    if (!agg[key]) agg[key] = { key, pulau: r.pulau, tujuan: r.tujuan, total: 0, vendors: {}, byType: {} };
+    if (!agg[key]) agg[key] = { key, pulau: r.pulau, tujuan: r.tujuan, total: 0, vendors: {}, byOT: {} };
     agg[key].total += r.total;
-    if (!agg[key].byType[r.type]) agg[key].byType[r.type] = { total: 0, vendors: {} };
+    const otk = `${r.origin}|${r.type}`;
+    if (!agg[key].byOT[otk]) agg[key].byOT[otk] = { origin: r.origin, type: r.type, total: 0, vendors: {} };
     for (const v of r.rows) {
       if (v.trip > 0) {
         agg[key].vendors[v.vendor] = (agg[key].vendors[v.vendor]||0) + v.trip;
-        agg[key].byType[r.type].vendors[v.vendor] = (agg[key].byType[r.type].vendors[v.vendor]||0) + v.trip;
-        agg[key].byType[r.type].total += v.trip;
+        agg[key].byOT[otk].vendors[v.vendor] = (agg[key].byOT[otk].vendors[v.vendor]||0) + v.trip;
+        agg[key].byOT[otk].total += v.trip;
       }
     }
   }
@@ -386,17 +413,19 @@ function renderDominansi() {
       <td class="mono">${a.hhi.toFixed(2)}</td>
       <td>${cell(a.top[0])}</td><td>${cell(a.top[1])}</td><td>${cell(a.top[2])}</td></tr>`;
     if (open) {
-      const types = Object.entries(a.byType).sort((x,y)=>(TORD[x[0]]??99)-(TORD[y[0]]??99));
+      const ots = Object.values(a.byOT).sort((x,y)=>
+        x.origin.localeCompare(y.origin) || (TORD[x.type]??99)-(TORD[y.type]??99));
       html += `<tr class="detailrow"><td colspan="9"><div class="detailwrap">
-        <div class="detailhdr">Breakdown per Type Armada — <b>${a.tujuan}</b> · persentase vendor yang terpakai</div>
+        <div class="detailhdr">Breakdown per Origin × Type Armada — <b>${a.tujuan}</b> · persentase vendor yang terpakai</div>
         <table class="detailtable"><thead><tr>
-          <th>Type Armada</th><th>Total Trip</th><th>Jml Vendor</th><th>Vendor Terpakai (share %)</th>
+          <th>Origin</th><th>Type Armada</th><th>Total Trip</th><th>Jml Vendor</th><th>Vendor Terpakai (share %)</th>
         </tr></thead><tbody>`;
-      for (const [ty, d] of types) {
+      for (const d of ots) {
         const vs = Object.entries(d.vendors).map(([v,c]) => [v, c, c/d.total]).sort((x,y)=>y[1]-x[1]);
         const chips = vs.map(([v,,sh]) => `<span class="chip">${v} ${pct(sh)}</span>`).join('');
         html += `<tr>
-          <td class="mono"><b>${ty}</b></td><td class="mono">${d.total}</td><td class="mono">${vs.length}</td>
+          <td class="mono">${d.origin}</td><td class="mono"><b>${d.type}</b></td>
+          <td class="mono">${d.total}</td><td class="mono">${vs.length}</td>
           <td><div class="chips inline">${chips}</div></td></tr>`;
       }
       html += `</tbody></table></div></td></tr>`;
