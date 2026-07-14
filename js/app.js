@@ -321,6 +321,8 @@ function renderVendorInactiveRoute() {
 }
 
 /* ---------- Tab: Dominansi ---------- */
+let domFilter = { pulau: '', tujuan: '', klas: '', qTujuan: '' };
+function setDom(field, val) { domFilter[field] = val; render(); }
 function renderDominansi() {
   // agregasi per pulau x tujuan
   const agg = {};
@@ -330,15 +332,36 @@ function renderDominansi() {
     agg[key].total += r.total;
     for (const v of r.rows) { if (v.trip>0) agg[key].vendors[v.vendor] = (agg[key].vendors[v.vendor]||0) + v.trip; }
   }
-  const rows = Object.values(agg).map(a => {
+  let rows = Object.values(agg).map(a => {
     const arr = Object.entries(a.vendors).map(([v,c]) => [v, c, c/a.total]).sort((x,y)=>y[1]-x[1]);
     const s1 = arr.length ? arr[0][2] : 0;
     const klas = s1>=0.8?'Monopoli':(s1>=0.5?'Dominan':'Terbagi');
     const hhi = arr.reduce((s,[,c])=>s+Math.pow(c/a.total,2),0);
     return { ...a, top: arr.slice(0,3), klas, hhi };
-  }).filter(a => matchSearch(a.tujuan)).sort((x,y)=>y.total-x.total);
-  if (!rows.length) return `<div class="empty">Tidak ada data.</div>`;
-  let html = `<div class="tablewrap"><table><thead><tr>
+  });
+  // opsi dropdown dari data
+  const pulaus = Array.from(new Set(rows.map(r => r.pulau||'-'))).sort();
+  const tujuans = Array.from(new Set(rows.map(r => r.tujuan))).sort();
+  const klasifikasi = ['Monopoli','Dominan','Terbagi'];
+  const f = domFilter;
+  rows = rows.filter(a =>
+    (!f.pulau || (a.pulau||'-') === f.pulau) &&
+    (!f.tujuan || a.tujuan === f.tujuan) &&
+    (!f.klas || a.klas === f.klas) &&
+    (!f.qTujuan || a.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
+  ).filter(a => matchSearch(a.tujuan)).sort((x,y)=>y.total-x.total);
+
+  const opt = (arr, sel) => ['<option value="">Semua</option>']
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Pulau</label><select onchange="setDom('pulau',this.value)">${opt(pulaus,f.pulau)}</select></div>
+    <div class="fld"><label>Cari Tujuan</label><input type="text" value="${f.qTujuan}" oninput="setDom('qTujuan',this.value)" placeholder="ketik…"></div>
+    <div class="fld"><label>Tujuan</label><select onchange="setDom('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
+    <div class="fld"><label>Klasifikasi</label><select onchange="setDom('klas',this.value)">${opt(klasifikasi,f.klas)}</select></div>
+  </div>`;
+
+  if (!rows.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
+  let html = toolbar + `<div class="tablewrap"><table><thead><tr>
     <th>Pulau</th><th>Tujuan</th><th>Trip</th><th>Klasifikasi</th><th>HHI</th>
     <th>Vendor #1</th><th>#2</th><th>#3</th></tr></thead><tbody>`;
   const kc = { Monopoli:'mono-k', Dominan:'dom', Terbagi:'terb' };
