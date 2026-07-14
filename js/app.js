@@ -322,15 +322,24 @@ function renderVendorInactiveRoute() {
 
 /* ---------- Tab: Dominansi ---------- */
 let domFilter = { pulau: '', tujuan: '', klas: '', qTujuan: '' };
+let expandedDom = null;
 function setDom(field, val) { domFilter[field] = val; render(); }
+function toggleDom(key) { expandedDom = (expandedDom === key) ? null : key; render(); }
 function renderDominansi() {
-  // agregasi per pulau x tujuan
+  // agregasi per pulau x tujuan (+ breakdown per type armada)
   const agg = {};
   for (const r of computed.routes.filter(filterPulau)) {
     const key = `${r.pulau||'-'}|${r.tujuan}`;
-    if (!agg[key]) agg[key] = { pulau: r.pulau, tujuan: r.tujuan, total: 0, vendors: {} };
+    if (!agg[key]) agg[key] = { key, pulau: r.pulau, tujuan: r.tujuan, total: 0, vendors: {}, byType: {} };
     agg[key].total += r.total;
-    for (const v of r.rows) { if (v.trip>0) agg[key].vendors[v.vendor] = (agg[key].vendors[v.vendor]||0) + v.trip; }
+    if (!agg[key].byType[r.type]) agg[key].byType[r.type] = { total: 0, vendors: {} };
+    for (const v of r.rows) {
+      if (v.trip > 0) {
+        agg[key].vendors[v.vendor] = (agg[key].vendors[v.vendor]||0) + v.trip;
+        agg[key].byType[r.type].vendors[v.vendor] = (agg[key].byType[r.type].vendors[v.vendor]||0) + v.trip;
+        agg[key].byType[r.type].total += v.trip;
+      }
+    }
   }
   let rows = Object.values(agg).map(a => {
     const arr = Object.entries(a.vendors).map(([v,c]) => [v, c, c/a.total]).sort((x,y)=>y[1]-x[1]);
@@ -361,17 +370,37 @@ function renderDominansi() {
   </div>`;
 
   if (!rows.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
-  let html = toolbar + `<div class="tablewrap"><table><thead><tr>
-    <th>Pulau</th><th>Tujuan</th><th>Trip</th><th>Klasifikasi</th><th>HHI</th>
+  let html = toolbar + `<div class="tablewrap"><table class="vendortable"><thead><tr>
+    <th></th><th>Pulau</th><th>Tujuan</th><th>Trip</th><th>Klasifikasi</th><th>HHI</th>
     <th>Vendor #1</th><th>#2</th><th>#3</th></tr></thead><tbody>`;
   const kc = { Monopoli:'mono-k', Dominan:'dom', Terbagi:'terb' };
+  const TORD = { CDDL:0, FUSO:1, WINGBOX:2, CDD:3, TRAILER:4, 'CONT-20':5, 'CONT-40':6 };
   for (const a of rows) {
     const cell = t => t ? `${t[0]} <span class="mono">(${pct(t[2])})</span>` : '—';
-    html += `<tr><td class="mono">${a.pulau||'-'}</td><td><b>${a.tujuan}</b></td>
+    const open = expandedDom === a.key;
+    html += `<tr class="vrow ${open?'open':''}" onclick="toggleDom('${a.key.replace(/'/g,"\\'")}')">
+      <td class="caret">${open?'\u25be':'\u25b8'}</td>
+      <td class="mono">${a.pulau||'-'}</td><td><b>${a.tujuan}</b></td>
       <td class="mono">${a.total}</td>
       <td><span class="klas ${kc[a.klas]}">${a.klas}</span></td>
       <td class="mono">${a.hhi.toFixed(2)}</td>
       <td>${cell(a.top[0])}</td><td>${cell(a.top[1])}</td><td>${cell(a.top[2])}</td></tr>`;
+    if (open) {
+      const types = Object.entries(a.byType).sort((x,y)=>(TORD[x[0]]??99)-(TORD[y[0]]??99));
+      html += `<tr class="detailrow"><td colspan="9"><div class="detailwrap">
+        <div class="detailhdr">Breakdown per Type Armada — <b>${a.tujuan}</b> · persentase vendor yang terpakai</div>
+        <table class="detailtable"><thead><tr>
+          <th>Type Armada</th><th>Total Trip</th><th>Jml Vendor</th><th>Vendor Terpakai (share %)</th>
+        </tr></thead><tbody>`;
+      for (const [ty, d] of types) {
+        const vs = Object.entries(d.vendors).map(([v,c]) => [v, c, c/d.total]).sort((x,y)=>y[1]-x[1]);
+        const chips = vs.map(([v,,sh]) => `<span class="chip">${v} ${pct(sh)}</span>`).join('');
+        html += `<tr>
+          <td class="mono"><b>${ty}</b></td><td class="mono">${d.total}</td><td class="mono">${vs.length}</td>
+          <td><div class="chips inline">${chips}</div></td></tr>`;
+      }
+      html += `</tbody></table></div></td></tr>`;
+    }
   }
   return html + '</tbody></table></div>';
 }
