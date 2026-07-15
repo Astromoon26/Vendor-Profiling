@@ -207,11 +207,42 @@ function renderVendor() {
 function setVendorSub(val) { state.vendorSub = val; expandedVendor = null; naFilter = { origin:'', tujuan:'', qOrigin:'', qTujuan:'' }; render(); }
 
 /* ---- Vendor Aktif ---- */
+let vaFilter = { q: '', sortKey: 'avgFinal', sortDir: 'desc' };
+function setVa(field, val) { vaFilter[field] = val; render(); }
+function sortVa(key) {
+  if (vaFilter.sortKey === key) vaFilter.sortDir = vaFilter.sortDir === 'desc' ? 'asc' : 'desc';
+  else { vaFilter.sortKey = key; vaFilter.sortDir = 'desc'; }
+  render();
+}
+function vaArrow(key) {
+  if (vaFilter.sortKey !== key) return '<span class="arr dim">\u2195</span>';
+  return vaFilter.sortDir === 'desc' ? '<span class="arr">\u25be</span>' : '<span class="arr">\u25b4</span>';
+}
 function renderVendorAktif() {
-  const vendors = computed.vendors.filter(v => matchSearch(v.vendor));
-  if (!vendors.length) return `<div class="empty">Tidak ada vendor aktif pada filter ini.</div>`;
-  let html = `<div class="tablewrap"><table class="vendortable"><thead><tr>
-    <th></th><th>#</th><th>Vendor</th><th>Total Trip</th><th>Rute Dilayani</th><th>Avg Skor Akhir</th>
+  const f = vaFilter;
+  let vendors = computed.vendors
+    .filter(v => !f.q || v.vendor.toLowerCase().includes(f.q.toLowerCase()))
+    .filter(v => matchSearch(v.vendor));
+  const dir = f.sortDir === 'desc' ? -1 : 1;
+  vendors = vendors.slice().sort((a, b) => (a[f.sortKey] - b[f.sortKey]) * dir);
+
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Cari Vendor</label><input type="text" value="${f.q}" oninput="setVa('q',this.value)" placeholder="ketik nama vendor…"></div>
+    <div class="fld"><label>Urutkan</label><select onchange="setVa('sortKey',this.value)">
+      <option value="avgFinal" ${f.sortKey==='avgFinal'?'selected':''}>Avg Skor Akhir</option>
+      <option value="trip" ${f.sortKey==='trip'?'selected':''}>Total Trip</option>
+      <option value="routes" ${f.sortKey==='routes'?'selected':''}>Rute Dilayani</option>
+    </select></div>
+    <div class="fld"><label>Arah</label><select onchange="setVa('sortDir',this.value)">
+      <option value="desc" ${f.sortDir==='desc'?'selected':''}>Terbesar → Terkecil</option>
+      <option value="asc" ${f.sortDir==='asc'?'selected':''}>Terkecil → Terbesar</option>
+    </select></div>
+  </div>`;
+
+  if (!vendors.length) return toolbar + `<div class="empty">Tidak ada vendor pada filter ini.</div>`;
+  const sh = (label, key) => `<th class="sortable" onclick="sortVa('${key}')">${label} ${vaArrow(key)}</th>`;
+  let html = toolbar + `<div class="tablewrap"><table class="vendortable"><thead><tr>
+    <th></th><th>#</th><th>Vendor</th>${sh('Total Trip','trip')}${sh('Rute Dilayani','routes')}${sh('Avg Skor Akhir','avgFinal')}
     </tr></thead><tbody>`;
   vendors.forEach((v, i) => {
     const open = expandedVendor === v.vendor;
@@ -506,6 +537,24 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+/* ---------- Tab: Supply & Demand (placeholder) ---------- */
+function renderSupDem() {
+  return `<div class="placeholder">
+    <div class="ph-icon">\u25f4</div>
+    <h2>Supply &amp; Demand</h2>
+    <p>Modul ini belum aktif — menunggu data dari lu.</p>
+    <div class="ph-note">
+      <div class="ph-note-hdr">Yang perlu disiapkan</div>
+      <ul>
+        <li>File data taruh di <code>data/</code> (format JSON, sama kayak <code>trips.json</code>)</li>
+        <li>Sertakan kolom kunci: Origin, Tujuan, Type Armada, dan periode (Month)</li>
+        <li>Demand = kebutuhan/permintaan trip · Supply = kapasitas vendor tersedia</li>
+      </ul>
+      <p class="ph-small">Begitu datanya siap, modul ini bakal ngitung gap supply vs demand per rute &amp; periode, ngikut window rolling yang sama kayak tab lain.</p>
+    </div>
+  </div>`;
+}
+
 /* ---------- render router ---------- */
 function render() {
   // simpan fokus & posisi kursor input toolbar detail (agar ketik tak terputus)
@@ -518,10 +567,11 @@ function render() {
   renderKpis();
   const view = document.getElementById('view');
   const kpiEl = document.getElementById('kpis');
-  kpiEl.style.display = state.tab === 'master' ? 'none' : '';
+  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem') ? 'none' : '';
   if (state.tab === 'ranking') view.innerHTML = renderRanking();
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
+  else if (state.tab === 'supdem') view.innerHTML = renderSupDem();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
   // pulihkan fokus
   if (focusInfo) {
