@@ -562,9 +562,10 @@ function renderSupDemTab() {
     <select onchange="setSdSub(this.value)">
       <option value="demand" ${sub==='demand'?'selected':''}>Demand (CBM per Kota × Origin)</option>
       <option value="supply" ${sub==='supply'?'selected':''}>Supply (Kapasitas CBM — hanya Fulfillment HIT)</option>
+      <option value="gap" ${sub==='gap'?'selected':''}>Gap Analysis (Demand vs Supply)</option>
     </select>
   </div>`;
-  return bar + (sub === 'supply' ? renderSupply() : renderSupDem());
+  return bar + (sub === 'supply' ? renderSupply() : sub === 'gap' ? renderGap() : renderSupDem());
 }
 
 /* ---- Supply: kapasitas CBM per minggu (hanya SLA Fulfillment HIT) ---- */
@@ -584,23 +585,23 @@ function renderSupply() {
   const weekSet = new Set();
   for (const d of rows) {
     const k = `${d.t}|${d.o}|${d.ty}`;
-    (perWeek[k] = perWeek[k] || {});
-    perWeek[k][d.w] = (perWeek[k][d.w] || 0) + 1;
+    (perWeek[k] = perWeek[k] || { w: {}, cap: d.cap, alloc: 0 });
+    perWeek[k].w[d.w] = (perWeek[k].w[d.w] || 0) + d.unit;
+    if (d.alloc) perWeek[k].alloc = 1;
     weekSet.add(d.w);
   }
   const totalWeeks = weekSet.size || 1;
-  let list = Object.entries(perWeek).map(([k, wk]) => {
+  let list = Object.entries(perWeek).map(([k, o]) => {
     const [tujuan, origin, type] = k.split('|');
-    const vals = Object.values(wk);
+    const vals = Object.values(o.w);
     const totalUnit = vals.reduce((s, v) => s + v, 0);
-    const ce = capEff(type);
+    const ce = o.cap;
     const avgUnitRaw = vals.length ? totalUnit / vals.length : 0;
-    const avgUnit = Math.round(avgUnitRaw);          // pembulatan normal (38,4->38 ; 16,6->17)
-    const peakUnit = vals.length ? Math.max(...vals) : 0;
+    const avgUnit = Math.round(avgUnitRaw);
+    const peakUnit = vals.length ? Math.round(Math.max(...vals)) : 0;
     return {
-      tujuan, origin, type, totalUnit, nWeeks: vals.length,
-      capEff: ce,
-      totalCbm: totalUnit * ce,
+      tujuan, origin, type, totalUnit, nWeeks: vals.length, alloc: o.alloc,
+      capEff: ce, totalCbm: totalUnit * ce,
       avgUnit, avgCbm: avgUnit * ce,
       peakUnit, peakCbm: peakUnit * ce
     };
@@ -635,6 +636,7 @@ function renderSupply() {
   </div>`;
   const note = `<div class="sdnote">Supply = trip dengan <b>SLA Fulfillment = HIT</b> saja (yang MIS tidak dihitung).
     Kapasitas CBM = unit × kapasitas max × <b>${(LOAD_FACTOR*100)}%</b> load factor.
+    Baris bertanda <span class="allocmark">⇄</span> = supply laut via Pelabuhan Jakarta, dialokasikan proporsional ke Jababeka/Cikupa berdasarkan demand kontainer per tujuan (estimasi).
     <span class="capchips">${Object.entries(CAP_MAX).filter(([k])=>types.includes(k)).map(([k,v])=>`<span class="capchip">${k} ${v}\u00d785%=${(v*LOAD_FACTOR).toFixed(1)}</span>`).join('')}</span></div>`;
 
   if (!list.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
@@ -644,8 +646,10 @@ function renderSupply() {
     ${sh('Avg CBM / Minggu Aktif','avgCbm')}${sh('Peak CBM Minggu','peakCbm')}
     </tr></thead><tbody>`;
   for (const a of list) {
-    html += `<tr>
-      <td><b>${a.tujuan}</b></td><td class="mono">${a.origin}</td><td class="mono">${a.type}</td>
+    html += `<tr class="${a.alloc?'allocrow':''}">
+      <td><b>${a.tujuan}</b></td>
+      <td class="mono">${a.origin}${a.alloc?' <span class="allocmark" title="Supply laut via Pelabuhan Jakarta — hasil alokasi proporsional">⇄</span>':''}</td>
+      <td class="mono">${a.type}</td>
       <td class="mono"><b class="teal">${num(a.avgCbm)}</b> <span class="wkdim">(${a.avgUnit} unit)</span></td>
       <td class="mono">${num(a.peakCbm)} <span class="wkdim">(${a.peakUnit})</span></td>
     </tr>`;
@@ -738,6 +742,120 @@ function renderSupDem() {
       <td class="mono teal">${pct(a.pctInt)}</td><td class="mono amber">${pct(a.pctExt)}</td>
       <td class="mono"><b>${num(a.avgWeekActive)}</b></td>
       <td class="mono">${num(a.peakWeek)}</td>
+    </tr>`;
+  }
+  return html + '</tbody></table></div>';
+}
+
+/* ---- Gap Analysis: Demand CBM vs Supply CBM per Tujuan × Origin ---- */
+let gapFilter = { origin: '', q: '', status: '', basis: 'raw', sortKey: 'gap', sortDir: 'asc' };
+function setGap(field, val) { gapFilter[field] = val; render(); }
+function sortGap(key) {
+  if (gapFilter.sortKey === key) gapFilter.sortDir = gapFilter.sortDir === 'desc' ? 'asc' : 'desc';
+  else { gapFilter.sortKey = key; gapFilter.sortDir = 'desc'; }
+  render();
+}
+function gapArrow(key) {
+  if (gapFilter.sortKey !== key) return '<span class="arr dim">\u2195</span>';
+  return gapFilter.sortDir === 'desc' ? '<span class="arr">\u25be</span>' : '<span class="arr">\u25b4</span>';
+}
+function renderGap() {
+  if (!SUPDEM || !SUPPLY) return `<div class="placeholder"><div class="ph-icon">\u25f4</div><h2>Gap Analysis</h2>
+    <p>Butuh <code>data/supply-demand.json</code> dan <code>data/supply.json</code>.</p></div>`;
+  const lo = state.month - state.rolling + 1, hi = state.month;
+
+  const dW = {}, weekSet = new Set();
+  for (const d of SUPDEM.demand) {
+    if (d.m < lo || d.m > hi || d.w == null) continue;
+    const k = `${d.t}|${d.dc}`;
+    (dW[k] = dW[k] || {});
+    dW[k][d.w] = (dW[k][d.w] || 0) + d.cbm;
+    weekSet.add(d.w);
+  }
+  const sW = {}, sAlloc = {};
+  for (const d of SUPPLY.supply) {
+    if (d.m < lo || d.m > hi) continue;
+    const k = `${d.t}|${d.o}`;
+    (sW[k] = sW[k] || {});
+    sW[k][d.w] = (sW[k][d.w] || 0) + d.unit * d.cap;
+    if (d.alloc) sAlloc[k] = 1;
+  }
+  const avgOf = wk => { const v = Object.values(wk || {}); return v.length ? v.reduce((s,x)=>s+x,0)/v.length : 0; };
+  const peakOf = wk => { const v = Object.values(wk || {}); return v.length ? Math.max(...v) : 0; };
+
+  const keys = new Set([...Object.keys(dW), ...Object.keys(sW)]);
+  let list = [];
+  for (const k of keys) {
+    const [tujuan, origin] = k.split('|');
+    const dAvg = avgOf(dW[k]), sAvg = avgOf(sW[k]);
+    const dPeak = peakOf(dW[k]), sPeak = peakOf(sW[k]);
+    const gap = sAvg - dAvg;
+    const ratio = dAvg > 0 ? sAvg / dAvg : (sAvg > 0 ? Infinity : 0);
+    let status;
+    if (dAvg === 0) status = 'Tanpa Demand';
+    else if (sAvg === 0) status = 'Tanpa Supply';
+    else if (ratio >= 1) status = 'Surplus';
+    else if (ratio >= 0.8) status = 'Ketat';
+    else status = 'Defisit';
+    list.push({ tujuan, origin, dAvg, sAvg, gap, ratio, dPeak, sPeak,
+                gapPeak: sPeak - dPeak, alloc: sAlloc[k] || 0, status });
+  }
+  const f = gapFilter;
+  const origins = Array.from(new Set(list.map(a => a.origin))).sort();
+  const statuses = ['Defisit','Ketat','Surplus','Tanpa Supply','Tanpa Demand'];
+  list = list.filter(a => (!f.origin || a.origin === f.origin) && (!f.status || a.status === f.status))
+             .filter(a => !f.q || a.tujuan.toLowerCase().includes(f.q.toLowerCase()))
+             .filter(a => matchSearch(a.tujuan));
+  const dir = f.sortDir === 'desc' ? -1 : 1;
+  list.sort((a, b) => typeof a[f.sortKey] === 'string'
+    ? a[f.sortKey].localeCompare(b[f.sortKey]) * dir
+    : ((a[f.sortKey] === Infinity ? 9e9 : a[f.sortKey]) - (b[f.sortKey] === Infinity ? 9e9 : b[f.sortKey])) * dir);
+
+  const nDef = list.filter(a => a.status === 'Defisit').length;
+  const nKetat = list.filter(a => a.status === 'Ketat').length;
+  const nSur = list.filter(a => a.status === 'Surplus').length;
+  const totS = list.reduce((s,a)=>s+a.sAvg,0);
+
+  const opt = (arr, sel, lbl) => [`<option value="">${lbl}</option>`]
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Origin</label><select onchange="setGap('origin',this.value)">${opt(origins,f.origin,'Semua Origin')}</select></div>
+    <div class="fld"><label>Status</label><select onchange="setGap('status',this.value)">${opt(statuses,f.status,'Semua Status')}</select></div>
+    <div class="fld"><label>Cari Kota</label><input type="text" value="${f.q}" oninput="setGap('q',this.value)" placeholder="ketik nama kota…"></div>
+  </div>`;
+  const totD = list.reduce((s,a)=>s+a.dAvg,0);
+  const sumbar = `<div class="sdsum">
+    <div class="sdbox"><span class="sdlbl">Avg Demand / Minggu</span><span class="sdval amber">${num(totD)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Avg Supply / Minggu</span><span class="sdval teal">${num(totS)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Gap Total</span><span class="sdval ${totS-totD<0?'red':'teal'}">${totS-totD>=0?'+':''}${num(totS-totD)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Defisit / Ketat / Surplus</span><span class="sdval"><span class="red">${nDef}</span> · <span class="amber">${nKetat}</span> · <span class="teal">${nSur}</span></span></div>
+    <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
+  </div>`;
+  const note = `<div class="sdnote">Demand = <b>rata-rata CBM per TRANSNO × Tujuan</b> (baris berulang dengan TRANSNO & tujuan sama dirata-ratakan jadi satu nilai).
+    Gap = <b>Supply − Demand</b> (CBM/minggu); negatif = kapasitas kurang.
+    Status: <b class="red">Defisit</b> (&lt;80%) · <b class="amber">Ketat</b> (80–99%) · <b class="teal">Surplus</b> (≥100%).
+    Baris <span class="allocmark">⇄</span> = supply laut via Pelabuhan Jakarta (alokasi proporsional ke Jababeka/Cikupa).</div>`;
+
+  if (!list.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
+  const sh = (label, key) => `<th class="sortable" onclick="sortGap('${key}')">${label} ${gapArrow(key)}</th>`;
+  const scls = { 'Defisit':'st-def','Ketat':'st-ket','Surplus':'st-sur','Tanpa Supply':'st-nos','Tanpa Demand':'st-nod' };
+  let html = toolbar + sumbar + note + `<div class="tablewrap"><table><thead><tr>
+    ${sh('Kota (Tujuan)','tujuan')}${sh('Origin','origin')}
+    ${sh('Demand / Minggu','dAvg')}${sh('Supply / Minggu','sAvg')}
+    ${sh('Gap','gap')}${sh('Rasio','ratio')}${sh('Status','status')}
+    ${sh('Gap saat Peak','gapPeak')}
+    </tr></thead><tbody>`;
+  for (const a of list) {
+    const rTxt = a.ratio === Infinity ? '∞' : pct(a.ratio);
+    html += `<tr class="${a.alloc?'allocrow':''}">
+      <td><b>${a.tujuan}</b></td>
+      <td class="mono">${a.origin}${a.alloc?' <span class="allocmark" title="Supply laut via Pelabuhan Jakarta — alokasi proporsional">⇄</span>':''}</td>
+      <td class="mono amber">${num(a.dAvg)}</td>
+      <td class="mono teal">${num(a.sAvg)}</td>
+      <td class="mono"><b class="${a.gap<0?'red':'teal'}">${a.gap>=0?'+':''}${num(a.gap)}</b></td>
+      <td class="mono">${rTxt}</td>
+      <td><span class="klas ${scls[a.status]}">${a.status}</span></td>
+      <td class="mono ${a.gapPeak<0?'red':'wkdim'}">${a.gapPeak>=0?'+':''}${num(a.gapPeak)}</td>
     </tr>`;
   }
   return html + '</tbody></table></div>';
