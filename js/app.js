@@ -2,7 +2,7 @@
    app.js — UI, state, rendering, master-scoring editor
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
-let DATA = null, MASTER = null, PRICE = null, SUPDEM = null;
+let DATA = null, MASTER = null, PRICE = null, SUPDEM = null, SUPPLY = null;
 let naFilter = { origin: '', tujuan: '', qOrigin: '', qTujuan: '' };
 let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
@@ -18,6 +18,7 @@ async function boot() {
   try { PRICE = await fetch('data/price.json').then(r => r.ok ? r.json() : null); } catch { PRICE = null; }
   // supply & demand opsional
   try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
+  try { SUPPLY = await fetch('data/supply.json').then(r => r.ok ? r.json() : null); } catch { SUPPLY = null; }
 
   // master: localStorage override kalau ada
   const saved = localStorage.getItem(LS_KEY);
@@ -541,7 +542,119 @@ function toast(msg) {
 
 /* ---------- Tab: Supply & Demand ---------- */
 let sdFilter = { dc: '', q: '', sortKey: 'cbm', sortDir: 'desc' };
+let spFilter = { origin: '', type: '', q: '', sortKey: 'avgCbm', sortDir: 'desc' };
 function setSd(field, val) { sdFilter[field] = val; render(); }
+function setSp(field, val) { spFilter[field] = val; render(); }
+function setSdSub(val) { state.sdSub = val; render(); }
+function sortSp(key) {
+  if (spFilter.sortKey === key) spFilter.sortDir = spFilter.sortDir === 'desc' ? 'asc' : 'desc';
+  else { spFilter.sortKey = key; spFilter.sortDir = 'desc'; }
+  render();
+}
+function spArrow(key) {
+  if (spFilter.sortKey !== key) return '<span class="arr dim">\u2195</span>';
+  return spFilter.sortDir === 'desc' ? '<span class="arr">\u25be</span>' : '<span class="arr">\u25b4</span>';
+}
+function renderSupDemTab() {
+  const sub = state.sdSub || 'demand';
+  const bar = `<div class="subnav">
+    <label>Tampilan</label>
+    <select onchange="setSdSub(this.value)">
+      <option value="demand" ${sub==='demand'?'selected':''}>Demand (CBM per Kota × Origin)</option>
+      <option value="supply" ${sub==='supply'?'selected':''}>Supply (Kapasitas CBM — hanya Fulfillment HIT)</option>
+    </select>
+  </div>`;
+  return bar + (sub === 'supply' ? renderSupply() : renderSupDem());
+}
+
+/* ---- Supply: kapasitas CBM per minggu (hanya SLA Fulfillment HIT) ---- */
+const CAP_MAX = { WINGBOX:42, 'CONT-40':50, TRAILER:42, FUSO:34, 'CONT-20':25, CDDL:16, CDD:13, CDEL:11,
+                  'CONT-45':64, CDE:4, 'CDD LOSBAK':11, 'CDD PICK UP':19, 'CDD BAK':6, 'MINI VAN BOX':3, 'CDE PICK UP':2, 'MIN VAN OPS':1 };
+const LOAD_FACTOR = 0.85;
+function capEff(type) { return (CAP_MAX[type] || 0) * LOAD_FACTOR; }
+
+function renderSupply() {
+  if (!SUPPLY) return `<div class="placeholder"><div class="ph-icon">\u25f4</div><h2>Supply</h2>
+    <p>Data belum tersedia — pastikan <code>data/supply.json</code> ada di repo.</p></div>`;
+  const lo = state.month - state.rolling + 1, hi = state.month;
+  const rows = SUPPLY.supply.filter(d => d.m >= lo && d.m <= hi);
+
+  // unit & kapasitas CBM per (tujuan|origin|type|week)
+  const perWeek = {};
+  const weekSet = new Set();
+  for (const d of rows) {
+    const k = `${d.t}|${d.o}|${d.ty}`;
+    (perWeek[k] = perWeek[k] || {});
+    perWeek[k][d.w] = (perWeek[k][d.w] || 0) + 1;
+    weekSet.add(d.w);
+  }
+  const totalWeeks = weekSet.size || 1;
+  let list = Object.entries(perWeek).map(([k, wk]) => {
+    const [tujuan, origin, type] = k.split('|');
+    const vals = Object.values(wk);
+    const totalUnit = vals.reduce((s, v) => s + v, 0);
+    const ce = capEff(type);
+    const avgUnit = vals.length ? totalUnit / vals.length : 0;
+    const peakUnit = vals.length ? Math.max(...vals) : 0;
+    return {
+      tujuan, origin, type, totalUnit, nWeeks: vals.length,
+      capEff: ce,
+      totalCbm: totalUnit * ce,
+      avgUnit, avgCbm: avgUnit * ce,
+      peakUnit, peakCbm: peakUnit * ce
+    };
+  });
+  const f = spFilter;
+  const origins = Array.from(new Set(list.map(a => a.origin))).sort();
+  const types = Array.from(new Set(list.map(a => a.type))).sort();
+  list = list.filter(a => (!f.origin || a.origin === f.origin) && (!f.type || a.type === f.type))
+             .filter(a => !f.q || a.tujuan.toLowerCase().includes(f.q.toLowerCase()))
+             .filter(a => matchSearch(a.tujuan));
+  const dir = f.sortDir === 'desc' ? -1 : 1;
+  list.sort((a, b) => typeof a[f.sortKey] === 'string'
+    ? a[f.sortKey].localeCompare(b[f.sortKey]) * dir : (a[f.sortKey] - b[f.sortKey]) * dir);
+
+  const totUnit = list.reduce((s, a) => s + a.totalUnit, 0);
+  const totCbm = list.reduce((s, a) => s + a.totalCbm, 0);
+  const avgCbmAll = list.reduce((s, a) => s + a.avgCbm, 0);
+
+  const opt = (arr, sel, lbl) => [`<option value="">${lbl}</option>`]
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Origin</label><select onchange="setSp('origin',this.value)">${opt(origins,f.origin,'Semua Origin')}</select></div>
+    <div class="fld"><label>Type Armada</label><select onchange="setSp('type',this.value)">${opt(types,f.type,'Semua Type')}</select></div>
+    <div class="fld"><label>Cari Kota</label><input type="text" value="${f.q}" oninput="setSp('q',this.value)" placeholder="ketik nama kota…"></div>
+  </div>`;
+  const sumbar = `<div class="sdsum">
+    <div class="sdbox"><span class="sdlbl">Total Supply</span><span class="sdval teal">${num(totCbm)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Total Unit (Fulfill HIT)</span><span class="sdval">${totUnit.toLocaleString('id-ID')} <i>unit</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Avg CBM / Minggu Aktif</span><span class="sdval">${num(avgCbmAll)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Minggu di Window</span><span class="sdval">${totalWeeks} <i>minggu</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
+  </div>`;
+  const note = `<div class="sdnote">Supply = trip dengan <b>SLA Fulfillment = HIT</b> saja (yang MIS tidak dihitung).
+    Kapasitas CBM = unit × kapasitas max × <b>${(LOAD_FACTOR*100)}%</b> load factor.
+    <span class="capchips">${Object.entries(CAP_MAX).filter(([k])=>types.includes(k)).map(([k,v])=>`<span class="capchip">${k} ${v}\u00d785%=${(v*LOAD_FACTOR).toFixed(1)}</span>`).join('')}</span></div>`;
+
+  if (!list.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
+  const sh = (label, key) => `<th class="sortable" onclick="sortSp('${key}')">${label} ${spArrow(key)}</th>`;
+  let html = toolbar + sumbar + note + `<div class="tablewrap"><table><thead><tr>
+    ${sh('Kota (Tujuan)','tujuan')}${sh('Origin','origin')}${sh('Type Armada','type')}
+    ${sh('Kap. Efektif','capEff')}${sh('Total Unit','totalUnit')}${sh('Total CBM','totalCbm')}
+    ${sh('Avg CBM / Minggu Aktif','avgCbm')}${sh('Peak CBM Minggu','peakCbm')}
+    </tr></thead><tbody>`;
+  for (const a of list) {
+    html += `<tr>
+      <td><b>${a.tujuan}</b></td><td class="mono">${a.origin}</td><td class="mono">${a.type}</td>
+      <td class="mono wkdim">${num(a.capEff,2)}</td>
+      <td class="mono">${a.totalUnit}</td>
+      <td class="mono">${num(a.totalCbm)}</td>
+      <td class="mono"><b class="teal">${num(a.avgCbm)}</b> <span class="wkdim">(${num(a.avgUnit)} unit)</span></td>
+      <td class="mono">${num(a.peakCbm)} <span class="wkdim">(${a.peakUnit})</span></td>
+    </tr>`;
+  }
+  return html + '</tbody></table></div>';
+}
 function sortSd(key) {
   if (sdFilter.sortKey === key) sdFilter.sortDir = sdFilter.sortDir === 'desc' ? 'asc' : 'desc';
   else { sdFilter.sortKey = key; sdFilter.sortDir = 'desc'; }
@@ -649,7 +762,7 @@ function render() {
   if (state.tab === 'ranking') view.innerHTML = renderRanking();
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
-  else if (state.tab === 'supdem') view.innerHTML = renderSupDem();
+  else if (state.tab === 'supdem') view.innerHTML = renderSupDemTab();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
   // pulihkan fokus
   if (focusInfo) {
