@@ -641,15 +641,11 @@ function renderSupply() {
   const sh = (label, key) => `<th class="sortable" onclick="sortSp('${key}')">${label} ${spArrow(key)}</th>`;
   let html = toolbar + sumbar + note + `<div class="tablewrap"><table><thead><tr>
     ${sh('Kota (Tujuan)','tujuan')}${sh('Origin','origin')}${sh('Type Armada','type')}
-    ${sh('Kap. Efektif','capEff')}${sh('Total Unit','totalUnit')}${sh('Total CBM','totalCbm')}
     ${sh('Avg CBM / Minggu Aktif','avgCbm')}${sh('Peak CBM Minggu','peakCbm')}
     </tr></thead><tbody>`;
   for (const a of list) {
     html += `<tr>
       <td><b>${a.tujuan}</b></td><td class="mono">${a.origin}</td><td class="mono">${a.type}</td>
-      <td class="mono wkdim">${num(a.capEff,2)}</td>
-      <td class="mono">${a.totalUnit}</td>
-      <td class="mono">${num(a.totalCbm)}</td>
       <td class="mono"><b class="teal">${num(a.avgCbm)}</b> <span class="wkdim">(${a.avgUnit} unit)</span></td>
       <td class="mono">${num(a.peakCbm)} <span class="wkdim">(${a.peakUnit})</span></td>
     </tr>`;
