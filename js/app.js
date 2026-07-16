@@ -594,7 +594,8 @@ function renderSupply() {
     const vals = Object.values(wk);
     const totalUnit = vals.reduce((s, v) => s + v, 0);
     const ce = capEff(type);
-    const avgUnit = vals.length ? totalUnit / vals.length : 0;
+    const avgUnitRaw = vals.length ? totalUnit / vals.length : 0;
+    const avgUnit = Math.round(avgUnitRaw);          // pembulatan normal (38,4->38 ; 16,6->17)
     const peakUnit = vals.length ? Math.max(...vals) : 0;
     return {
       tujuan, origin, type, totalUnit, nWeeks: vals.length,
@@ -649,7 +650,7 @@ function renderSupply() {
       <td class="mono wkdim">${num(a.capEff,2)}</td>
       <td class="mono">${a.totalUnit}</td>
       <td class="mono">${num(a.totalCbm)}</td>
-      <td class="mono"><b class="teal">${num(a.avgCbm)}</b> <span class="wkdim">(${num(a.avgUnit)} unit)</span></td>
+      <td class="mono"><b class="teal">${num(a.avgCbm)}</b> <span class="wkdim">(${a.avgUnit} unit)</span></td>
       <td class="mono">${num(a.peakCbm)} <span class="wkdim">(${a.peakUnit})</span></td>
     </tr>`;
   }
