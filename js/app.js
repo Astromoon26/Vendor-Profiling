@@ -564,15 +564,27 @@ function renderSupDem() {
 
   // agregasi kota x DC
   const agg = {};
+  const weekSet = new Set();
   for (const d of rows) {
     const k = `${d.t}|${d.dc}`;
-    if (!agg[k]) agg[k] = { tujuan: d.t, dc: d.dc, cbm: 0, int: 0, ext: 0, trip: 0 };
+    if (!agg[k]) agg[k] = { tujuan: d.t, dc: d.dc, cbm: 0, int: 0, ext: 0, trip: 0, weeks: {} };
     agg[k].cbm += d.cbm; agg[k].trip += 1;
     if (d.f === 1) agg[k].int += d.cbm; else agg[k].ext += d.cbm;
+    if (d.w != null) { agg[k].weeks[d.w] = (agg[k].weeks[d.w] || 0) + d.cbm; weekSet.add(d.w); }
   }
-  let list = Object.values(agg).map(a => ({
-    ...a, pctInt: a.cbm ? a.int / a.cbm : 0, pctExt: a.cbm ? a.ext / a.cbm : 0
-  }));
+  const totalWeeks = weekSet.size || 1;   // jml minggu di window (mis. 14)
+  let list = Object.values(agg).map(a => {
+    const wk = Object.values(a.weeks);
+    const nActiveWeeks = wk.length;
+    const peak = wk.length ? Math.max(...wk) : 0;
+    return {
+      ...a, pctInt: a.cbm ? a.int / a.cbm : 0, pctExt: a.cbm ? a.ext / a.cbm : 0,
+      nWeeks: nActiveWeeks,
+      avgWeekActive: nActiveWeeks ? a.cbm / nActiveWeeks : 0,
+      avgWeekWindow: a.cbm / totalWeeks,
+      peakWeek: peak
+    };
+  });
   const f = sdFilter;
   const dcs = SUPDEM.dcs || Array.from(new Set(list.map(a => a.dc))).sort();
   list = list.filter(a => (!f.dc || a.dc === f.dc))
@@ -598,6 +610,7 @@ function renderSupDem() {
     <div class="sdbox"><span class="sdlbl">Total Demand</span><span class="sdval">${num(totCbm)} <i>CBM</i></span></div>
     <div class="sdbox"><span class="sdlbl">Internal</span><span class="sdval teal">${num(totInt)} <i>CBM</i> · ${pct(totCbm?totInt/totCbm:0)}</span></div>
     <div class="sdbox"><span class="sdlbl">External</span><span class="sdval amber">${num(totExt)} <i>CBM</i> · ${pct(totCbm?totExt/totCbm:0)}</span></div>
+    <div class="sdbox"><span class="sdlbl">Minggu di Window</span><span class="sdval">${totalWeeks} <i>minggu</i></span></div>
     <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
   </div>`;
 
@@ -605,12 +618,18 @@ function renderSupDem() {
   const sh = (label, key) => `<th class="sortable" onclick="sortSd('${key}')">${label} ${sdArrow(key)}</th>`;
   let html = toolbar + sumbar + `<div class="tablewrap"><table><thead><tr>
     ${sh('Kota (Tujuan)','tujuan')}${sh('Origin (DC)','dc')}${sh('Total CBM','cbm')}
+    ${sh('Avg CBM / Minggu Aktif','avgWeekActive')}${sh('Avg CBM / Minggu Window','avgWeekWindow')}
+    ${sh('Minggu Aktif','nWeeks')}${sh('Peak Minggu','peakWeek')}
     ${sh('% Internal','pctInt')}${sh('% External','pctExt')}
     </tr></thead><tbody>`;
   for (const a of list) {
     html += `<tr>
       <td><b>${a.tujuan}</b></td><td class="mono">${a.dc}</td>
       <td class="mono">${num(a.cbm)}</td>
+      <td class="mono"><b>${num(a.avgWeekActive)}</b></td>
+      <td class="mono">${num(a.avgWeekWindow)}</td>
+      <td class="mono">${a.nWeeks}<span class="wkdim">/${totalWeeks}</span></td>
+      <td class="mono">${num(a.peakWeek)}</td>
       <td class="mono teal">${pct(a.pctInt)}</td><td class="mono amber">${pct(a.pctExt)}</td>
     </tr>`;
   }

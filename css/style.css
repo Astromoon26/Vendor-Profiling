@@ -206,3 +206,4 @@ tbody tr:hover{background:var(--panel-2)}
 td.teal{color:var(--teal)} td.amber{color:var(--amber)}
 .bar{display:flex;height:9px;width:120px;border-radius:5px;overflow:hidden;background:var(--panel-2)}
 .bar-int{background:var(--teal)} .bar-ext{background:var(--amber)}
+.wkdim{color:var(--ink-dim);font-size:10px}
