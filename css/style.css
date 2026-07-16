@@ -195,3 +195,14 @@ tbody tr:hover{background:var(--panel-2)}
 .ph-note ul{margin:0;padding-left:18px;color:var(--ink);font-size:13px;line-height:1.9}
 .ph-note code{font-family:var(--mono);font-size:12px;background:var(--panel-2);padding:2px 6px;border-radius:3px;color:var(--teal)}
 .ph-small{margin:14px 0 0;font-size:12px;color:var(--ink-dim);line-height:1.6}
+
+/* ---- Supply & Demand ---- */
+.sdsum{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.sdbox{flex:1;min-width:160px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:5px}
+.sdlbl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-dim)}
+.sdval{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--ink)}
+.sdval i{font-style:normal;font-size:10px;color:var(--ink-dim)}
+.sdval.teal{color:var(--teal)} .sdval.amber{color:var(--amber)}
+td.teal{color:var(--teal)} td.amber{color:var(--amber)}
+.bar{display:flex;height:9px;width:120px;border-radius:5px;overflow:hidden;background:var(--panel-2)}
+.bar-int{background:var(--teal)} .bar-ext{background:var(--amber)}

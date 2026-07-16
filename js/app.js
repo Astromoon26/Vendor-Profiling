@@ -2,7 +2,7 @@
    app.js — UI, state, rendering, master-scoring editor
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
-let DATA = null, MASTER = null, PRICE = null;
+let DATA = null, MASTER = null, PRICE = null, SUPDEM = null;
 let naFilter = { origin: '', tujuan: '', qOrigin: '', qTujuan: '' };
 let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
@@ -16,6 +16,8 @@ async function boot() {
   DATA = trips;
   // price map opsional (kalau ada data/price.json)
   try { PRICE = await fetch('data/price.json').then(r => r.ok ? r.json() : null); } catch { PRICE = null; }
+  // supply & demand opsional
+  try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
 
   // master: localStorage override kalau ada
   const saved = localStorage.getItem(LS_KEY);
@@ -537,22 +539,84 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ---------- Tab: Supply & Demand (placeholder) ---------- */
+/* ---------- Tab: Supply & Demand ---------- */
+let sdFilter = { dc: '', q: '', sortKey: 'cbm', sortDir: 'desc' };
+function setSd(field, val) { sdFilter[field] = val; render(); }
+function sortSd(key) {
+  if (sdFilter.sortKey === key) sdFilter.sortDir = sdFilter.sortDir === 'desc' ? 'asc' : 'desc';
+  else { sdFilter.sortKey = key; sdFilter.sortDir = 'desc'; }
+  render();
+}
+function sdArrow(key) {
+  if (sdFilter.sortKey !== key) return '<span class="arr dim">\u2195</span>';
+  return sdFilter.sortDir === 'desc' ? '<span class="arr">\u25be</span>' : '<span class="arr">\u25b4</span>';
+}
+function num(x, d = 1) { return x.toLocaleString('id-ID', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
 function renderSupDem() {
-  return `<div class="placeholder">
-    <div class="ph-icon">\u25f4</div>
-    <h2>Supply &amp; Demand</h2>
-    <p>Modul ini belum aktif — menunggu data dari lu.</p>
-    <div class="ph-note">
-      <div class="ph-note-hdr">Yang perlu disiapkan</div>
-      <ul>
-        <li>File data taruh di <code>data/</code> (format JSON, sama kayak <code>trips.json</code>)</li>
-        <li>Sertakan kolom kunci: Origin, Tujuan, Type Armada, dan periode (Month)</li>
-        <li>Demand = kebutuhan/permintaan trip · Supply = kapasitas vendor tersedia</li>
-      </ul>
-      <p class="ph-small">Begitu datanya siap, modul ini bakal ngitung gap supply vs demand per rute &amp; periode, ngikut window rolling yang sama kayak tab lain.</p>
-    </div>
+  if (!SUPDEM) return `<div class="placeholder">
+    <div class="ph-icon">\u25f4</div><h2>Supply &amp; Demand</h2>
+    <p>Data belum tersedia — pastikan <code>data/supply-demand.json</code> ada di repo.</p></div>`;
+
+  // rolling window sama seperti tab lain
+  const lo = state.month - state.rolling + 1, hi = state.month;
+  const rows = SUPDEM.demand.filter(d => d.m >= lo && d.m <= hi);
+
+  // agregasi kota x DC
+  const agg = {};
+  for (const d of rows) {
+    const k = `${d.t}|${d.dc}`;
+    if (!agg[k]) agg[k] = { tujuan: d.t, dc: d.dc, cbm: 0, int: 0, ext: 0, trip: 0 };
+    agg[k].cbm += d.cbm; agg[k].trip += 1;
+    if (d.f === 1) agg[k].int += d.cbm; else agg[k].ext += d.cbm;
+  }
+  let list = Object.values(agg).map(a => ({
+    ...a, pctInt: a.cbm ? a.int / a.cbm : 0, pctExt: a.cbm ? a.ext / a.cbm : 0
+  }));
+  const f = sdFilter;
+  const dcs = SUPDEM.dcs || Array.from(new Set(list.map(a => a.dc))).sort();
+  list = list.filter(a => (!f.dc || a.dc === f.dc))
+             .filter(a => !f.q || a.tujuan.toLowerCase().includes(f.q.toLowerCase()))
+             .filter(a => matchSearch(a.tujuan));
+  const dir = f.sortDir === 'desc' ? -1 : 1;
+  list.sort((a, b) => typeof a[f.sortKey] === 'string'
+    ? a[f.sortKey].localeCompare(b[f.sortKey]) * dir
+    : (a[f.sortKey] - b[f.sortKey]) * dir);
+
+  const totCbm = list.reduce((s, a) => s + a.cbm, 0);
+  const totInt = list.reduce((s, a) => s + a.int, 0);
+  const totExt = list.reduce((s, a) => s + a.ext, 0);
+
+  const opt = (arr, sel) => ['<option value="">Semua DC</option>']
+    .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Origin (DC)</label><select onchange="setSd('dc',this.value)">${opt(dcs,f.dc)}</select></div>
+    <div class="fld"><label>Cari Kota</label><input type="text" value="${f.q}" oninput="setSd('q',this.value)" placeholder="ketik nama kota…"></div>
   </div>`;
+
+  const sumbar = `<div class="sdsum">
+    <div class="sdbox"><span class="sdlbl">Total Demand</span><span class="sdval">${num(totCbm)} <i>CBM</i></span></div>
+    <div class="sdbox"><span class="sdlbl">Internal</span><span class="sdval teal">${num(totInt)} <i>CBM</i> · ${pct(totCbm?totInt/totCbm:0)}</span></div>
+    <div class="sdbox"><span class="sdlbl">External</span><span class="sdval amber">${num(totExt)} <i>CBM</i> · ${pct(totCbm?totExt/totCbm:0)}</span></div>
+    <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
+  </div>`;
+
+  if (!list.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
+  const sh = (label, key) => `<th class="sortable" onclick="sortSd('${key}')">${label} ${sdArrow(key)}</th>`;
+  let html = toolbar + sumbar + `<div class="tablewrap"><table><thead><tr>
+    ${sh('Kota (Tujuan)','tujuan')}${sh('Origin (DC)','dc')}${sh('Total CBM','cbm')}${sh('Trip','trip')}
+    ${sh('CBM Internal','int')}${sh('CBM External','ext')}${sh('% Internal','pctInt')}${sh('% External','pctExt')}
+    <th>Komposisi</th></tr></thead><tbody>`;
+  for (const a of list) {
+    html += `<tr>
+      <td><b>${a.tujuan}</b></td><td class="mono">${a.dc}</td>
+      <td class="mono">${num(a.cbm)}</td><td class="mono">${a.trip}</td>
+      <td class="mono">${num(a.int)}</td><td class="mono">${num(a.ext)}</td>
+      <td class="mono teal">${pct(a.pctInt)}</td><td class="mono amber">${pct(a.pctExt)}</td>
+      <td><div class="bar"><div class="bar-int" style="width:${(a.pctInt*100).toFixed(1)}%"></div><div class="bar-ext" style="width:${(a.pctExt*100).toFixed(1)}%"></div></div></td>
+    </tr>`;
+  }
+  return html + '</tbody></table></div>';
 }
 
 /* ---------- render router ---------- */
