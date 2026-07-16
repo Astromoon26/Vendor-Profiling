@@ -618,19 +618,16 @@ function renderSupDem() {
   const sh = (label, key) => `<th class="sortable" onclick="sortSd('${key}')">${label} ${sdArrow(key)}</th>`;
   let html = toolbar + sumbar + `<div class="tablewrap"><table><thead><tr>
     ${sh('Kota (Tujuan)','tujuan')}${sh('Origin (DC)','dc')}${sh('Total CBM','cbm')}
-    ${sh('Avg CBM / Minggu Aktif','avgWeekActive')}${sh('Avg CBM / Minggu Window','avgWeekWindow')}
-    ${sh('Minggu Aktif','nWeeks')}${sh('Peak Minggu','peakWeek')}
     ${sh('% Internal','pctInt')}${sh('% External','pctExt')}
+    ${sh('Avg CBM / Minggu Aktif','avgWeekActive')}${sh('Peak Minggu','peakWeek')}
     </tr></thead><tbody>`;
   for (const a of list) {
     html += `<tr>
       <td><b>${a.tujuan}</b></td><td class="mono">${a.dc}</td>
       <td class="mono">${num(a.cbm)}</td>
-      <td class="mono"><b>${num(a.avgWeekActive)}</b></td>
-      <td class="mono">${num(a.avgWeekWindow)}</td>
-      <td class="mono">${a.nWeeks}<span class="wkdim">/${totalWeeks}</span></td>
-      <td class="mono">${num(a.peakWeek)}</td>
       <td class="mono teal">${pct(a.pctInt)}</td><td class="mono amber">${pct(a.pctExt)}</td>
+      <td class="mono"><b>${num(a.avgWeekActive)}</b></td>
+      <td class="mono">${num(a.peakWeek)}</td>
     </tr>`;
   }
   return html + '</tbody></table></div>';
