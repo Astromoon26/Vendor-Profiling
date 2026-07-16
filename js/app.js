@@ -604,16 +604,14 @@ function renderSupDem() {
   if (!list.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
   const sh = (label, key) => `<th class="sortable" onclick="sortSd('${key}')">${label} ${sdArrow(key)}</th>`;
   let html = toolbar + sumbar + `<div class="tablewrap"><table><thead><tr>
-    ${sh('Kota (Tujuan)','tujuan')}${sh('Origin (DC)','dc')}${sh('Total CBM','cbm')}${sh('Trip','trip')}
-    ${sh('CBM Internal','int')}${sh('CBM External','ext')}${sh('% Internal','pctInt')}${sh('% External','pctExt')}
-    <th>Komposisi</th></tr></thead><tbody>`;
+    ${sh('Kota (Tujuan)','tujuan')}${sh('Origin (DC)','dc')}${sh('Total CBM','cbm')}
+    ${sh('% Internal','pctInt')}${sh('% External','pctExt')}
+    </tr></thead><tbody>`;
   for (const a of list) {
     html += `<tr>
       <td><b>${a.tujuan}</b></td><td class="mono">${a.dc}</td>
-      <td class="mono">${num(a.cbm)}</td><td class="mono">${a.trip}</td>
-      <td class="mono">${num(a.int)}</td><td class="mono">${num(a.ext)}</td>
+      <td class="mono">${num(a.cbm)}</td>
       <td class="mono teal">${pct(a.pctInt)}</td><td class="mono amber">${pct(a.pctExt)}</td>
-      <td><div class="bar"><div class="bar-int" style="width:${(a.pctInt*100).toFixed(1)}%"></div><div class="bar-ext" style="width:${(a.pctExt*100).toFixed(1)}%"></div></div></td>
     </tr>`;
   }
   return html + '</tbody></table></div>';
