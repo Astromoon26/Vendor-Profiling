@@ -749,7 +749,7 @@ function renderSupDem() {
 }
 
 /* ---- Gap Analysis: Demand CBM vs Supply CBM per Tujuan × Origin ---- */
-let gapFilter = { origin: '', q: '', status: '', basis: 'raw', sortKey: 'gap', sortDir: 'asc' };
+let gapFilter = { origin: '', q: '', status: '', fleetBasis: 'avg', sortKey: 'gap', sortDir: 'asc' };
 function setGap(field, val) { gapFilter[field] = val; render(); }
 function sortGap(key) {
   if (gapFilter.sortKey === key) gapFilter.sortDir = gapFilter.sortDir === 'desc' ? 'asc' : 'desc';
@@ -821,6 +821,10 @@ function renderGap() {
   const opt = (arr, sel, lbl) => [`<option value="">${lbl}</option>`]
     .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
   const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Basis Kebutuhan Armada</label><select onchange="setGap('fleetBasis',this.value)">
+      <option value="avg" ${f.fleetBasis!=='peak'?'selected':''}>Minggu Biasa (Gap avg)</option>
+      <option value="peak" ${f.fleetBasis==='peak'?'selected':''}>Peak Minggu (Gap peak)</option>
+    </select></div>
     <div class="fld"><label>Origin</label><select onchange="setGap('origin',this.value)">${opt(origins,f.origin,'Semua Origin')}</select></div>
     <div class="fld"><label>Status</label><select onchange="setGap('status',this.value)">${opt(statuses,f.status,'Semua Status')}</select></div>
     <div class="fld"><label>Cari Kota</label><input type="text" value="${f.q}" oninput="setGap('q',this.value)" placeholder="ketik nama kota…"></div>
@@ -833,8 +837,9 @@ function renderGap() {
     <div class="sdbox"><span class="sdlbl">Defisit / Ketat / Surplus</span><span class="sdval"><span class="red">${nDef}</span> · <span class="amber">${nKetat}</span> · <span class="teal">${nSur}</span></span></div>
     <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
   </div>`;
+  const isPeak = f.fleetBasis === 'peak';
   const note = `<div class="sdnote">Demand = <b>rata-rata CBM per TRANSNO × Tujuan</b>. Gap = <b>Supply − Demand</b> (CBM/minggu); negatif = kapasitas kurang.
-    Kolom <b>Kebutuhan Armada</b> = berapa unit tambahan untuk menutup gap, dihitung dari <b>kapasitas × 85%</b> load factor
+    Kolom <b>Kebutuhan Armada</b> = unit tambahan untuk menutup gap ${isPeak?'<b class="amber">saat minggu peak</b>':'<b class="amber">di minggu rata-rata</b>'}, dihitung dari <b>kapasitas × 85%</b> load factor
     <span class="capchips">${Object.entries(FLEET).map(([k,v])=>`<span class="capchip">${k} ${v}\u00d785%=${(v*LOAD_FACTOR).toFixed(2)}</span>`).join('')}</span>
     <br>Tujuan di <b>Kalimantan · Sulawesi · Maluku · Papua · Kupang</b> hanya menampilkan CONT-20/CONT-40 (armada darat tidak relevan).
     Baris <span class="allocmark">⇄</span> = supply laut via Pelabuhan Jakarta (alokasi proporsional).</div>`;
@@ -843,7 +848,7 @@ function renderGap() {
   const sh = (label, key) => `<th class="sortable" onclick="sortGap('${key}')">${label} ${gapArrow(key)}</th>`;
   const scls = { 'Defisit':'st-def','Ketat':'st-ket','Surplus':'st-sur','Tanpa Supply':'st-nos','Tanpa Demand':'st-nod' };
   let html = toolbar + sumbar + note + `<div class="tablewrap"><table><thead>
-    <tr><th colspan="8"></th><th colspan="5" class="grouphdr">Kebutuhan Armada (unit)</th></tr>
+    <tr><th colspan="8"></th><th colspan="5" class="grouphdr">Kebutuhan Armada (unit) — ${isPeak?'Peak Minggu':'Minggu Biasa'}</th></tr>
     <tr>
     ${sh('Kota (Tujuan)','tujuan')}${sh('Origin','origin')}
     ${sh('Demand / Minggu','dAvg')}${sh('Supply / Minggu','sAvg')}
@@ -853,7 +858,8 @@ function renderGap() {
     </tr></thead><tbody>`;
   for (const a of list) {
     const rTxt = a.ratio === Infinity ? '∞' : pct(a.ratio);
-    const need = a.gap < 0 ? -a.gap : 0;
+    const src = isPeak ? a.gapPeak : a.gap;
+    const need = src < 0 ? -src : 0;
     const cell = ty => {
       if (a.contOnly && !ty.startsWith('CONT')) return `<td class="mono na">—</td>`;
       if (!need) return `<td class="mono wkdim">0</td>`;
@@ -864,10 +870,10 @@ function renderGap() {
       <td class="mono">${a.origin}${a.alloc?' <span class="allocmark" title="Supply laut via Pelabuhan Jakarta — alokasi proporsional">⇄</span>':''}</td>
       <td class="mono amber">${num(a.dAvg)}</td>
       <td class="mono teal">${num(a.sAvg)}</td>
-      <td class="mono"><b class="${a.gap<0?'red':'teal'}">${a.gap>=0?'+':''}${num(a.gap)}</b></td>
+      <td class="mono ${!isPeak?'basisactive':''}"><b class="${a.gap<0?'red':'teal'}">${a.gap>=0?'+':''}${num(a.gap)}</b></td>
       <td class="mono">${rTxt}</td>
       <td><span class="klas ${scls[a.status]}">${a.status}</span></td>
-      <td class="mono ${a.gapPeak<0?'red':'wkdim'}">${a.gapPeak>=0?'+':''}${num(a.gapPeak)}</td>
+      <td class="mono ${isPeak?'basisactive':''} ${a.gapPeak<0?'red':'wkdim'}">${a.gapPeak>=0?'+':''}${num(a.gapPeak)}</td>
       ${cell('CDDL')}${cell('FUSO')}${cell('WINGBOX')}${cell('CONT-20')}${cell('CONT-40')}
     </tr>`;
   }
