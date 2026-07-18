@@ -211,3 +211,24 @@ td.teal{color:var(--teal)} td.amber{color:var(--amber)}
 .sdnote b{color:var(--teal)}
 .capchips{display:inline-flex;flex-wrap:wrap;gap:5px;margin-left:6px}
 .capchip{font-family:var(--mono);font-size:10px;background:rgba(93,180,159,.12);color:var(--teal);border:1px solid rgba(93,180,159,.3);border-radius:3px;padding:2px 6px}
+
+/* ---- Gap Analysis ---- */
+.klas.st-def{background:var(--red);color:#fff}
+.klas.st-ket{background:var(--amber);color:#1a1f28}
+.klas.st-sur{background:var(--teal);color:#0d1117}
+.klas.st-nos{background:#7a3b2e;color:#f0d5cd}
+.klas.st-nod{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line)}
+.allocmark{color:var(--amber);font-weight:700;cursor:help}
+tr.allocrow td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+td.red,.sdval .red,b.red{color:var(--red)}
+.sdval.red{color:var(--red)}
+.sdval .teal{color:var(--teal)} .sdval .amber{color:var(--amber)}
+.sdnote.warn{border-left-color:var(--amber);background:rgba(212,160,23,.07)}
+.sdnote.warn b{color:var(--amber)}
+.sdval.wkdim{color:var(--ink-dim)}
+
+/* ---- Konversi gap ke armada ---- */
+th.grouphdr{background:var(--panel-2);color:var(--amber);font-size:9px;text-align:center;letter-spacing:1px;border-bottom:1px solid var(--amber)}
+td.need{color:var(--ink);font-weight:700;background:rgba(212,160,23,.07)}
+td.na{color:#3d4653;background:rgba(0,0,0,.15)}
+.seamark{color:var(--teal);font-size:11px;cursor:help}
