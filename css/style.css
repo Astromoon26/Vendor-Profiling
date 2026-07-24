@@ -233,3 +233,26 @@ td.need{color:var(--ink);font-weight:700;background:rgba(212,160,23,.07)}
 td.na{color:#3d4653;background:rgba(0,0,0,.15)}
 .seamark{color:var(--teal);font-size:11px;cursor:help}
 td.basisactive{box-shadow:inset 0 0 0 1px rgba(212,160,23,.35);background:rgba(212,160,23,.06)}
+
+/* ---- Penjelasan Score Price di Master Scoring ---- */
+.editcard.wide{margin:18px 0 6px;max-width:none}
+.tagauto{font-family:var(--mono);font-size:9px;font-weight:400;text-transform:uppercase;letter-spacing:.6px;
+  background:rgba(93,180,159,.13);color:var(--teal);border:1px solid rgba(93,180,159,.3);border-radius:3px;padding:2px 7px;margin-left:8px;vertical-align:middle}
+.note.tight{margin:0 0 14px;line-height:1.7}
+.steps{display:flex;flex-direction:column;gap:9px;margin-bottom:16px}
+.step{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--ink);line-height:1.65}
+.stepno{flex:none;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1a1f28;
+  font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.formula{display:inline-block;font-family:var(--mono);font-size:11.5px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:4px;padding:3px 9px;margin-top:4px;color:var(--teal)}
+.exbox{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:13px 15px;margin:16px 0}
+.exhdr{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--amber);margin-bottom:4px}
+.exsub{font-size:11.5px;color:var(--ink-dim);margin-bottom:10px;font-family:var(--mono)}
+.extable{width:100%;font-size:12px}
+.extable th{font-size:9.5px}
+.rulebox{border-left:2px solid var(--teal);background:rgba(93,180,159,.06);border-radius:4px;padding:11px 15px;margin-bottom:14px}
+.rulehdr{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--teal);margin-bottom:7px}
+.rulebox ul{margin:0;padding-left:17px;font-size:12.5px;color:var(--ink);line-height:1.85}
+.warnbox{border-left:2px solid var(--amber);background:rgba(212,160,23,.07);border-radius:4px;
+  padding:11px 15px;font-size:12.5px;color:var(--ink);line-height:1.75}
+.warnbox b{color:var(--amber)}

@@ -135,7 +135,7 @@ function renderRanking() {
   let html = toolbar + `<div class="tablewrap"><table><thead><tr>
     <th>Origin</th><th>Tujuan</th><th>Type</th><th>Trip</th>
     <th>Vendor</th><th>Status</th><th>Share</th>
-    <th>Avail</th><th>Fulfill</th><th>OTA</th><th>Price</th><th>Skor Akhir</th>
+    <th>Prop</th><th>Fulfill</th><th>OTA</th><th>Price</th><th>Skor Akhir</th>
     </tr></thead><tbody>`;
   for (const r of routes) {
     r.rows.forEach((v, i) => {
@@ -235,6 +235,8 @@ function renderVendorAktif() {
       <option value="avgFinal" ${f.sortKey==='avgFinal'?'selected':''}>Avg Skor Akhir</option>
       <option value="trip" ${f.sortKey==='trip'?'selected':''}>Total Trip</option>
       <option value="routes" ${f.sortKey==='routes'?'selected':''}>Rute Dilayani</option>
+      <option value="tujuans" ${f.sortKey==='tujuans'?'selected':''}>Tujuan Dilayani</option>
+      <option value="shareTrip" ${f.sortKey==='shareTrip'?'selected':''}>% Total Trip</option>
     </select></div>
     <div class="fld"><label>Arah</label><select onchange="setVa('sortDir',this.value)">
       <option value="desc" ${f.sortDir==='desc'?'selected':''}>Terbesar → Terkecil</option>
@@ -245,14 +247,17 @@ function renderVendorAktif() {
   if (!vendors.length) return toolbar + `<div class="empty">Tidak ada vendor pada filter ini.</div>`;
   const sh = (label, key) => `<th class="sortable" onclick="sortVa('${key}')">${label} ${vaArrow(key)}</th>`;
   let html = toolbar + `<div class="tablewrap"><table class="vendortable"><thead><tr>
-    <th></th><th>#</th><th>Vendor</th>${sh('Total Trip','trip')}${sh('Rute Dilayani','routes')}${sh('Avg Skor Akhir','avgFinal')}
+    <th></th><th>#</th><th>Vendor</th>${sh('Total Trip','trip')}${sh('% Total Trip','shareTrip')}${sh('Rute Dilayani','routes')}${sh('Tujuan Dilayani','tujuans')}${sh('Avg Skor Akhir','avgFinal')}
     </tr></thead><tbody>`;
   vendors.forEach((v, i) => {
     const open = expandedVendor === v.vendor;
     html += `<tr class="vrow ${open?'open':''}" onclick="toggleVendor('${v.vendor.replace(/'/g,"\\'")}')">
       <td class="caret">${open?'\u25be':'\u25b8'}</td>
       <td class="mono">${i+1}</td><td class="mono"><b>${v.vendor}</b></td>
-      <td class="mono">${v.trip.toLocaleString()}</td><td class="mono">${v.routes}</td>
+      <td class="mono">${v.trip.toLocaleString()}</td>
+      <td class="mono amber">${(v.shareTrip*100).toFixed(1)}%</td>
+      <td class="mono">${v.routes}</td>
+      <td class="mono">${v.tujuans}</td>
       <td class="final">${v.avgFinal.toFixed(2)}</td></tr>`;
     if (open) {
       const origins = Array.from(new Set(v.detail.map(d => d.origin))).sort();
@@ -262,7 +267,7 @@ function renderVendorAktif() {
         .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
       const rows = applyDetailFilter(v.detail);
       const shead = (label, key) => `<th class="sortable" onclick="event.stopPropagation();sortDetail('${key}')">${label} ${sortArrow(key)}</th>`;
-      html += `<tr class="detailrow"><td colspan="6"><div class="detailwrap" onclick="event.stopPropagation()">
+      html += `<tr class="detailrow"><td colspan="8"><div class="detailwrap" onclick="event.stopPropagation()">
         <div class="detailhdr">Detail rute <b>${v.vendor}</b> — skor mentah (sebelum pembobotan) · <span class="muted">${rows.length}/${v.detail.length} rute</span></div>
         <div class="detailtoolbar">
           <div class="fld"><label>Cari Origin</label><input type="text" value="${detailFilter.qOrigin}" oninput="setDetail('qOrigin',this.value)" placeholder="ketik…"></div>
@@ -274,7 +279,7 @@ function renderVendorAktif() {
         <table class="detailtable"><thead><tr>
           <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th>
           ${shead('Trip','trip')}${shead('Share','share')}
-          ${shead('Avail','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('Price','price')}
+          ${shead('Prop','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('Price','price')}
         </tr></thead><tbody>`;
       if (!rows.length) {
         html += `<tr><td colspan="11" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
@@ -481,18 +486,76 @@ function bandEditor(title, key) {
     <table><thead><tr><th>Skor</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody></table>
     <p class="note">Ambang dalam persen. Contoh 50 = 50%. Batas atas (Max) bersifat eksklusif.</p></div>`;
 }
+function priceExplainer() {
+  const cfg = MASTER.price || { intervals: 5, cheapestScore: 5, labels: {} };
+  const L = cfg.labels || {};
+  const n = cfg.intervals, top = cfg.cheapestScore;
+  let bandRows = '';
+  for (let i = 0; i < n; i++) {
+    const skor = top - i;
+    bandRows += `<tr><td>${sc(skor)}</td><td class="mono">interval ke-${i + 1}</td><td>${L[skor] || '—'}</td></tr>`;
+  }
+  return `<div class="editcard wide">
+    <h3>Score Price <span class="tagauto">otomatis — tidak diedit manual</span></h3>
+    <p class="note tight">Berbeda dari tiga skor di atas, <b>Price tidak pakai ambang tetap</b>. Harga dinilai
+      <b>relatif per rute</b> (Origin × Tujuan × Type Armada): tiap rute punya skalanya sendiri, dibentuk dari
+      harga vendor-vendor yang melayani rute itu di <span class="mono">Master Price</span>.</p>
+
+    <div class="steps">
+      <div class="step"><span class="stepno">1</span><div>Ambil harga semua vendor di rute tsb → tentukan
+        <span class="mono">min</span> (termurah) dan <span class="mono">max</span> (termahal).</div></div>
+      <div class="step"><span class="stepno">2</span><div>Bagi rentang jadi ${n} interval sama lebar:
+        <span class="formula">lebar = (max − min) ÷ ${n}</span></div></div>
+      <div class="step"><span class="stepno">3</span><div>Tentukan posisi vendor lalu konversi ke skor:
+        <span class="formula">idx = ⌊(harga − min) ÷ lebar⌋ &nbsp;·&nbsp; skor = ${top} − idx</span></div></div>
+    </div>
+
+    <table><thead><tr><th>Skor</th><th>Posisi Harga</th><th>Label</th></tr></thead><tbody>
+      ${bandRows}
+      <tr><td>${sc(0)}</td><td class="mono">tidak ada harga</td><td>${L['0'] || 'Non AVL / Tidak ada harga'}</td></tr>
+    </tbody></table>
+
+    <div class="exbox">
+      <div class="exhdr">Contoh — rute dengan 4 vendor</div>
+      <div class="exsub">min = 5,0 jt · max = 10,0 jt · lebar = (10 − 5) ÷ ${n} = <b>1,0 jt</b></div>
+      <table class="extable"><thead><tr><th>Vendor</th><th>Harga</th><th>Hitungan</th><th>Skor</th></tr></thead><tbody>
+        <tr><td>A</td><td class="mono">5,0 jt</td><td class="mono">idx = 0</td><td>${sc(5)} <span class="wkdim">Murah</span></td></tr>
+        <tr><td>B</td><td class="mono">6,0 jt</td><td class="mono">idx = 1</td><td>${sc(4)} <span class="wkdim">Menengah Murah</span></td></tr>
+        <tr><td>C</td><td class="mono">8,0 jt</td><td class="mono">idx = 3</td><td>${sc(2)} <span class="wkdim">Menengah Mahal</span></td></tr>
+        <tr><td>D</td><td class="mono">10,0 jt</td><td class="mono">idx = 5 → dibatasi 4</td><td>${sc(1)} <span class="wkdim">Mahal</span></td></tr>
+      </tbody></table>
+    </div>
+
+    <div class="rulebox">
+      <div class="rulehdr">Aturan Khusus</div>
+      <ul>
+        <li><b>Vendor tunggal</b> (min = max): otomatis skor <b>${top}</b> — tidak ada pembanding.</li>
+        <li><b>Tanpa harga</b> di Master Price: skor <b>0</b>.</li>
+        <li><b>Harga tertinggi persis</b>: idx dibatasi maksimal ${n - 1}, sehingga skor terendah tetap <b>1</b> (bukan 0).</li>
+      </ul>
+    </div>
+
+    <div class="warnbox">
+      <b>Cara membaca yang benar:</b> karena skalanya relatif, <b>skor 5 di rute A belum tentu lebih murah
+      daripada skor 3 di rute B</b> — skor hanya membandingkan vendor <i>dalam rute yang sama</i>.
+      Rute dengan sedikit vendor cenderung menghasilkan skor ekstrem: bila hanya ada 2 vendor,
+      satu mendapat ${top} dan satunya 1, meskipun selisih harganya tipis.
+    </div>
+  </div>`;
+}
 function renderMaster() {
   const w = MASTER.weights;
   const weightRows = ['availability','fulfillment','ota','price'].map(k =>
     `<div class="weights-row"><label>${k}</label>
      <input type="number" min="0" max="100" value="${w[k]}" data-w="${k}"></div>`).join('');
   return `<div class="editor">
-    ${bandEditor('Score Availability','availability')}
+    ${bandEditor('Score Proportion','availability')}
     ${bandEditor('Score Fulfillment','fulfillment')}
     ${bandEditor('Score OTA','ota')}
     <div class="editcard"><h3>Bobot Skor Akhir</h3>${weightRows}
       <p class="note">Bobot menentukan skor akhir tertimbang. Total tidak harus 100 (dinormalisasi otomatis). Price di-skor relatif per rute (termurah=5).</p></div>
     </div>
+    ${priceExplainer()}
     <div class="savebar">
       <button class="btn" onclick="saveMaster()">Simpan &amp; Terapkan</button>
       <button class="btn ghost" onclick="exportMaster()">Export JSON</button>

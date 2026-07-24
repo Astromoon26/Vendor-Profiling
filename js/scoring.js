@@ -111,10 +111,11 @@ const Scoring = (() => {
       // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
         if (r.trip === 0) continue;
-        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0, detail: [] };
+        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0, detail: [], tujuanSet: new Set() };
         vendorAgg[r.vendor].trip += r.trip;
         vendorAgg[r.vendor].routes += 1;
         vendorAgg[r.vendor].sumFinal += r.finalScore;
+        vendorAgg[r.vendor].tujuanSet.add(t);
         vendorAgg[r.vendor].detail.push({
           origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
           trip: r.trip, share: r.share, isAvl: r.isAvl,
@@ -124,9 +125,14 @@ const Scoring = (() => {
       }
     }
     // rata2 skor akhir per vendor + urutkan detail (trip desc)
+    const totalTripAll = trips.length;
     const vendors = Object.values(vendorAgg).map(v => {
       v.detail.sort((a, b) => b.trip - a.trip);
-      return { ...v, avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0 };
+      const { tujuanSet, ...rest } = v;
+      return { ...rest,
+        tujuans: tujuanSet.size,
+        shareTrip: totalTripAll ? v.trip / totalTripAll : 0,
+        avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0 };
     }).sort((a, b) => b.avgFinal - a.avgFinal || b.trip - a.trip);
 
     // vendor tidak aktif: terdaftar di AVL tapi 0 trip di window ini
