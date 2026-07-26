@@ -9,20 +9,43 @@ let computed = null;
 
 /* ---------- boot ---------- */
 async function boot() {
-  const [trips, masterDefault] = await Promise.all([
-    fetch('data/trips.json').then(r => r.json()),
-    fetch('data/master-scoring.json').then(r => r.json())
-  ]);
-  DATA = trips;
-  // price map opsional (kalau ada data/price.json)
+  const masterDefault = await fetch('data/master-scoring.json').then(r => r.json());
+  const pulauMap = await fetch('data/pulau-map.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+
+  // ---- Sumber data: Google Sheets (live) dengan fallback ke JSON statis ----
+  let liveOK = false;
+  if (typeof DataSource !== 'undefined' && DataSource.ENABLED) {
+    try {
+      const built = await DataSource.fetchAndBuild(pulauMap);
+      // pertahankan avl & scoreOrder dari JSON statis (tidak ada di GSheet)
+      const stat = await fetch('data/trips.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
+      built.trips.avl = stat.avl || {};
+      built.trips.scoreOrder = stat.scoreOrder || {};
+      DATA = built.trips;
+      SUPPLY = built.supply;
+      liveOK = true;
+      window.__dataSource = 'Google Sheets (live)';
+    } catch (e) {
+      console.warn('Live fetch gagal, fallback ke JSON statis:', e);
+    }
+  }
+  if (!liveOK) {
+    DATA = await fetch('data/trips.json').then(r => r.json());
+    try { SUPPLY = await fetch('data/supply.json').then(r => r.ok ? r.json() : null); } catch { SUPPLY = null; }
+    window.__dataSource = 'JSON statis';
+  }
+
+  // price map opsional
   try { PRICE = await fetch('data/price.json').then(r => r.ok ? r.json() : null); } catch { PRICE = null; }
-  // supply & demand opsional
+  // supply-demand (demand CBM) selalu dari JSON — di-push manual tiap bulan
   try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
-  try { SUPPLY = await fetch('data/supply.json').then(r => r.ok ? r.json() : null); } catch { SUPPLY = null; }
 
   // master: localStorage override kalau ada
   const saved = localStorage.getItem(LS_KEY);
   MASTER = saved ? JSON.parse(saved) : masterDefault;
+  // migrasi: kalau MASTER lama belum punya OTD, ambil dari default
+  if (!MASTER.otd) MASTER.otd = masterDefault.otd;
+  if (MASTER.weights && MASTER.weights.otd == null) MASTER.weights.otd = masterDefault.weights.otd;
 
   // populate month
   const months = DATA.months;
@@ -58,8 +81,10 @@ function recompute() {
   computed = Scoring.buildAll(DATA, MASTER, state.month, PRICE);
   const [lo, hi] = computed.windowMonths;
   const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
+  const srcLive = (window.__dataSource || '').includes('live');
+  const srcDot = `<span class="srcdot ${srcLive?'live':'static'}" title="Sumber: ${window.__dataSource||'—'}"></span>`;
   document.getElementById('windowPill').innerHTML =
-    `window: <b>${mName[lo]||lo}\u2013${mName[hi]||hi}</b> \u00b7 ${computed.tripCount.toLocaleString()} trip`;
+    `${srcDot}window: <b>${mName[lo]||lo}\u2013${mName[hi]||hi}</b> \u00b7 ${computed.tripCount.toLocaleString()} trip`;
   render();
 }
 
@@ -135,7 +160,7 @@ function renderRanking() {
   let html = toolbar + `<div class="tablewrap"><table><thead><tr>
     <th>Origin</th><th>Tujuan</th><th>Type</th><th>Trip</th>
     <th>Vendor</th><th>Status</th><th>Share</th>
-    <th>Prop</th><th>Fulfill</th><th>OTA</th><th>Price</th><th>Skor Akhir</th>
+    <th>Prop</th><th>Fulfill</th><th>OTA</th><th>OTD</th><th>Price</th><th>Skor Akhir</th>
     </tr></thead><tbody>`;
   for (const r of routes) {
     r.rows.forEach((v, i) => {
@@ -147,7 +172,7 @@ function renderRanking() {
         <td class="mono">${v.vendor}</td>
         <td>${tag(v.isAvl)}</td>
         <td class="mono">${pct(v.share)}</td>
-        <td>${sc(v.scoreAvail)}</td><td>${sc(v.scoreFul)}</td><td>${sc(v.scoreOta)}</td><td>${sc(v.scorePrice)}</td>
+        <td>${sc(v.scoreAvail)}</td><td>${sc(v.scoreFul)}</td><td>${sc(v.scoreOta)}</td><td>${sc(v.scoreOtd)}</td><td>${sc(v.scorePrice)}</td>
         <td class="final">${v.finalScore.toFixed(2)}</td>
       </tr>`;
     });
@@ -184,7 +209,7 @@ function applyDetailFilter(detail) {
     (!f.qOrigin || d.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
     (!f.qTujuan || d.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
   );
-  const keyMap = { trip:'trip', share:'share', avail:'scoreAvail', fulfill:'scoreFul', ota:'scoreOta', price:'scorePrice' };
+  const keyMap = { trip:'trip', share:'share', avail:'scoreAvail', fulfill:'scoreFul', ota:'scoreOta', otd:'scoreOtd', price:'scorePrice' };
   const k = keyMap[f.sortKey] || 'trip';
   rows.sort((a, b) => f.sortDir === 'desc' ? b[k] - a[k] : a[k] - b[k]);
   return rows;
@@ -279,16 +304,16 @@ function renderVendorAktif() {
         <table class="detailtable"><thead><tr>
           <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th>
           ${shead('Trip','trip')}${shead('Share','share')}
-          ${shead('Prop','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('Price','price')}
+          ${shead('Prop','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('OTD','otd')}${shead('Price','price')}
         </tr></thead><tbody>`;
       if (!rows.length) {
-        html += `<tr><td colspan="11" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
+        html += `<tr><td colspan="12" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
       } else for (const d of rows) {
         html += `<tr>
           <td class="mono">${d.origin}</td><td><b>${d.tujuan}</b></td><td class="mono">${d.type}</td>
           <td class="mono">${d.pulau||'-'}</td><td>${tag(d.isAvl)}</td>
           <td class="mono">${d.trip}</td><td class="mono">${pct(d.share)}</td>
-          <td>${sc(d.scoreAvail)}</td><td>${sc(d.scoreFul)}</td><td>${sc(d.scoreOta)}</td><td>${sc(d.scorePrice)}</td>
+          <td>${sc(d.scoreAvail)}</td><td>${sc(d.scoreFul)}</td><td>${sc(d.scoreOta)}</td><td>${sc(d.scoreOtd)}</td><td>${sc(d.scorePrice)}</td>
         </tr>`;
       }
       html += `</tbody></table></div></td></tr>`;
@@ -545,13 +570,14 @@ function priceExplainer() {
 }
 function renderMaster() {
   const w = MASTER.weights;
-  const weightRows = ['availability','fulfillment','ota','price'].map(k =>
+  const weightRows = ['availability','fulfillment','ota','otd','price'].map(k =>
     `<div class="weights-row"><label>${k}</label>
      <input type="number" min="0" max="100" value="${w[k]}" data-w="${k}"></div>`).join('');
   return `<div class="editor">
     ${bandEditor('Score Proportion','availability')}
     ${bandEditor('Score Fulfillment','fulfillment')}
     ${bandEditor('Score OTA','ota')}
+    ${bandEditor('Score OTD','otd')}
     <div class="editcard"><h3>Bobot Skor Akhir</h3>${weightRows}
       <p class="note">Bobot menentukan skor akhir tertimbang. Total tidak harus 100 (dinormalisasi otomatis). Price di-skor relatif per rute (termurah=5).</p></div>
     </div>

@@ -39,8 +39,8 @@ const Scoring = (() => {
     // agregasi per vendor
     const agg = {};
     for (const t of routeTrips) {
-      if (!agg[t.v]) agg[t.v] = { trip: 0, ota: 0, ful: 0 };
-      agg[t.v].trip++; agg[t.v].ota += t.ota; agg[t.v].ful += t.ful;
+      if (!agg[t.v]) agg[t.v] = { trip: 0, ota: 0, ful: 0, otd: 0 };
+      agg[t.v].trip++; agg[t.v].ota += t.ota; agg[t.v].ful += t.ful; agg[t.v].otd += (t.otd || 0);
     }
     const usedVendors = Object.keys(agg);
     const allVendors = Array.from(new Set([...(avlVendors || []), ...usedVendors]));
@@ -55,29 +55,33 @@ const Scoring = (() => {
     const pmax = costs.length ? Math.max(...costs) : null;
 
     const rows = allVendors.map(v => {
-      const a = agg[v] || { trip: 0, ota: 0, ful: 0 };
+      const a = agg[v] || { trip: 0, ota: 0, ful: 0, otd: 0 };
       const share = total > 0 ? a.trip / total : 0;
       const otaPct = a.trip > 0 ? a.ota / a.trip : 0;
       const fulPct = a.trip > 0 ? a.ful / a.trip : 0;
+      const otdPct = a.trip > 0 ? a.otd / a.trip : 0;
       const cost = priceMap ? (priceMap[v] ?? null) : null;
       const isAvl = (avlVendors || []).includes(v);
       const sAvail = bandScore(share, master.availability);
       const sFul = bandScore(fulPct, master.fulfillment);
       const sOta = bandScore(otaPct, master.ota);
+      const sOtd = bandScore(otdPct, master.otd || master.ota);
       const sPrice = priceScore(cost, pmin, pmax, master.price);
-      // skor akhir tertimbang
+      // skor akhir tertimbang (5 dimensi)
       const w = master.weights;
-      const wtotal = (w.availability + w.fulfillment + w.ota + w.price) || 1;
+      const wOtd = (w.otd != null ? w.otd : 0);
+      const wtotal = (w.availability + w.fulfillment + w.ota + wOtd + w.price) || 1;
       const finalScore = (
         sAvail * w.availability +
         sFul * w.fulfillment +
         sOta * w.ota +
+        sOtd * wOtd +
         sPrice * w.price
       ) / wtotal;
       return {
         vendor: v, isAvl, trip: a.trip, share,
-        otaPct, fulPct, cost,
-        scoreAvail: sAvail, scoreFul: sFul, scoreOta: sOta, scorePrice: sPrice,
+        otaPct, fulPct, otdPct, cost,
+        scoreAvail: sAvail, scoreFul: sFul, scoreOta: sOta, scoreOtd: sOtd, scorePrice: sPrice,
         finalScore: Math.round(finalScore * 100) / 100
       };
     });
@@ -119,7 +123,7 @@ const Scoring = (() => {
         vendorAgg[r.vendor].detail.push({
           origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
           trip: r.trip, share: r.share, isAvl: r.isAvl,
-          scoreAvail: r.scoreAvail, scoreFul: r.scoreFul, scoreOta: r.scoreOta, scorePrice: r.scorePrice,
+          scoreAvail: r.scoreAvail, scoreFul: r.scoreFul, scoreOta: r.scoreOta, scoreOtd: r.scoreOtd, scorePrice: r.scorePrice,
           finalScore: r.finalScore
         });
       }

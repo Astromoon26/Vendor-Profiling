@@ -256,3 +256,8 @@ td.basisactive{box-shadow:inset 0 0 0 1px rgba(212,160,23,.35);background:rgba(2
 .warnbox{border-left:2px solid var(--amber);background:rgba(212,160,23,.07);border-radius:4px;
   padding:11px 15px;font-size:12.5px;color:var(--ink);line-height:1.75}
 .warnbox b{color:var(--amber)}
+
+/* ---- indikator sumber data ---- */
+.srcdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:middle}
+.srcdot.live{background:var(--teal);box-shadow:0 0 6px var(--teal)}
+.srcdot.static{background:var(--ink-dim)}
