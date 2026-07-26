@@ -92,6 +92,12 @@ function recompute() {
 function sc(n) { return `<span class="score s${n}">${n}</span>`; }
 function pct(x) { return (x * 100).toFixed(0) + '%'; }
 function tag(isAvl) { return isAvl ? '<span class="tag avl">AVL</span>' : '<span class="tag nonavl">NON-AVL</span>'; }
+function modaBadge(m) {
+  if (!m) return '<span class="wkdim">—</span>';
+  const cls = m === 'SEA' ? 'moda-sea' : 'moda-land';
+  const label = m === 'SEA' ? 'Sea' : 'Land';
+  return `<span class="modabadge ${cls}">${label}</span>`;
+}
 function matchSearch(...vals) { return !state.search || vals.some(v => (v || '').toLowerCase().includes(state.search)); }
 function filterPulau(r) { return !state.pulau || r.pulau === state.pulau; }
 
@@ -124,7 +130,7 @@ function renderKpis() {
 
 /* ---------- Tab: Ranking Rute ---------- */
 /* ---------- Tab: Route ---------- */
-let routeFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '' };
+let routeFilter = { origin: '', tujuan: '', type: '', moda: '', qOrigin: '', qTujuan: '' };
 function setRoute(field, val) { routeFilter[field] = val; render(); }
 function renderRanking() {
   const f = routeFilter;
@@ -136,11 +142,13 @@ function renderRanking() {
   const origins = Array.from(new Set(routes.map(r => r.origin))).sort();
   const tujuans = Array.from(new Set(routes.map(r => r.tujuan))).sort();
   const types = Array.from(new Set(routes.map(r => r.type))).sort();
+  const modas = Array.from(new Set(routes.map(r => r.moda).filter(Boolean))).sort();
   // terapkan filter toolbar + search global
   routes = routes.filter(r =>
     (!f.origin || r.origin === f.origin) &&
     (!f.tujuan || r.tujuan === f.tujuan) &&
     (!f.type || r.type === f.type) &&
+    (!f.moda || r.moda === f.moda) &&
     (!f.qOrigin || r.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
     (!f.qTujuan || r.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
   ).filter(r => matchSearch(r.tujuan, r.origin, ...r.rows.map(x => x.vendor)))
@@ -154,11 +162,12 @@ function renderRanking() {
     <div class="fld"><label>Cari Tujuan</label><input type="text" value="${f.qTujuan}" oninput="setRoute('qTujuan',this.value)" placeholder="ketik…"></div>
     <div class="fld"><label>Tujuan</label><select onchange="setRoute('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
     <div class="fld"><label>Type Armada</label><select onchange="setRoute('type',this.value)">${opt(types,f.type)}</select></div>
+    <div class="fld"><label>Moda</label><select onchange="setRoute('moda',this.value)">${opt(modas,f.moda)}</select></div>
   </div>`;
 
   if (!routes.length) return toolbar + `<div class="empty">Tidak ada rute pada filter ini.</div>`;
   let html = toolbar + `<div class="tablewrap"><table><thead><tr>
-    <th>Origin</th><th>Tujuan</th><th>Type</th><th>Trip</th>
+    <th>Origin</th><th>Tujuan</th><th>Type</th><th>Moda</th><th>Trip</th>
     <th>Vendor</th><th>Status</th><th>Share</th>
     <th>Prop</th><th>Fulfill</th><th>OTA</th><th>OTD</th><th>Price</th><th>Skor Akhir</th>
     </tr></thead><tbody>`;
@@ -168,6 +177,7 @@ function renderRanking() {
         ${i === 0 ? `<td class="mono" rowspan="${r.rows.length}">${r.origin}</td>
                      <td rowspan="${r.rows.length}"><b>${r.tujuan}</b></td>
                      <td class="mono" rowspan="${r.rows.length}">${r.type}</td>
+                     <td rowspan="${r.rows.length}">${modaBadge(r.moda)}</td>
                      <td class="mono" rowspan="${r.rows.length}">${r.total}</td>` : ''}
         <td class="mono">${v.vendor}</td>
         <td>${tag(v.isAvl)}</td>
@@ -183,11 +193,11 @@ function renderRanking() {
 /* ---------- Tab: Vendor (ekspandable ke detail rute) ---------- */
 let expandedVendor = null;
 // state filter/sort untuk detail vendor yang sedang terbuka
-let detailFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
+let detailFilter = { origin: '', tujuan: '', type: '', moda: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
 function toggleVendor(name) {
   const changing = expandedVendor !== name;
   expandedVendor = (expandedVendor === name) ? null : name;
-  if (changing) detailFilter = { origin: '', tujuan: '', type: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
+  if (changing) detailFilter = { origin: '', tujuan: '', type: '', moda: '', qOrigin: '', qTujuan: '', sortKey: 'trip', sortDir: 'desc' };
   render();
 }
 function setDetail(field, val) { detailFilter[field] = val; render(); }
@@ -206,6 +216,7 @@ function applyDetailFilter(detail) {
     (!f.origin || d.origin === f.origin) &&
     (!f.tujuan || d.tujuan === f.tujuan) &&
     (!f.type || d.type === f.type) &&
+    (!f.moda || d.moda === f.moda) &&
     (!f.qOrigin || d.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
     (!f.qTujuan || d.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
   );
@@ -288,6 +299,7 @@ function renderVendorAktif() {
       const origins = Array.from(new Set(v.detail.map(d => d.origin))).sort();
       const tujuans = Array.from(new Set(v.detail.map(d => d.tujuan))).sort();
       const types = Array.from(new Set(v.detail.map(d => d.type))).sort();
+      const modas = Array.from(new Set(v.detail.map(d => d.moda).filter(Boolean))).sort();
       const opt = (arr, sel) => ['<option value="">Semua</option>']
         .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
       const rows = applyDetailFilter(v.detail);
@@ -300,18 +312,19 @@ function renderVendorAktif() {
           <div class="fld"><label>Cari Tujuan</label><input type="text" value="${detailFilter.qTujuan}" oninput="setDetail('qTujuan',this.value)" placeholder="ketik…"></div>
           <div class="fld"><label>Tujuan</label><select onchange="setDetail('tujuan',this.value)">${opt(tujuans,detailFilter.tujuan)}</select></div>
           <div class="fld"><label>Type Armada</label><select onchange="setDetail('type',this.value)">${opt(types,detailFilter.type)}</select></div>
+          <div class="fld"><label>Moda</label><select onchange="setDetail('moda',this.value)">${opt(modas,detailFilter.moda)}</select></div>
         </div>
         <table class="detailtable"><thead><tr>
-          <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Status</th>
+          <th>Origin</th><th>Tujuan</th><th>Type</th><th>Pulau</th><th>Moda</th><th>Status</th>
           ${shead('Trip','trip')}${shead('Share','share')}
           ${shead('Prop','avail')}${shead('Fulfill','fulfill')}${shead('OTA','ota')}${shead('OTD','otd')}${shead('Price','price')}
         </tr></thead><tbody>`;
       if (!rows.length) {
-        html += `<tr><td colspan="12" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
+        html += `<tr><td colspan="13" class="empty small">Tidak ada rute pada filter ini.</td></tr>`;
       } else for (const d of rows) {
         html += `<tr>
           <td class="mono">${d.origin}</td><td><b>${d.tujuan}</b></td><td class="mono">${d.type}</td>
-          <td class="mono">${d.pulau||'-'}</td><td>${tag(d.isAvl)}</td>
+          <td class="mono">${d.pulau||'-'}</td><td>${modaBadge(d.moda)}</td><td>${tag(d.isAvl)}</td>
           <td class="mono">${d.trip}</td><td class="mono">${pct(d.share)}</td>
           <td>${sc(d.scoreAvail)}</td><td>${sc(d.scoreFul)}</td><td>${sc(d.scoreOta)}</td><td>${sc(d.scoreOtd)}</td><td>${sc(d.scorePrice)}</td>
         </tr>`;

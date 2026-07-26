@@ -40,6 +40,13 @@ const DataSource = {
     const s = String(x || '').toUpperCase().trim();
     return s === 'RPL' ? 'TEL' : s;
   },
+  // moda: LAND/SEA saja, LCL di-exclude
+  normModa(x) {
+    const s = String(x || '').toUpperCase().trim();
+    if (s === 'LAND') return 'LAND';
+    if (s === 'SEA') return 'SEA';
+    return null;   // LCL & lainnya -> exclude
+  },
 
   // parser CSV sederhana (handle quoted fields & koma di dalam quote)
   parseCSV(text) {
@@ -87,7 +94,7 @@ const DataSource = {
     const header = rows[0].map(h => h.trim());
     const col = name => header.indexOf(name);
     const iSite = col('Supply site'), iVen = col('Vendor'), iType = col('TYPE'),
-          iTuj = col('Tujuan'), iDate = col('Delivery Date'),
+          iTuj = col('Tujuan'), iDate = col('Delivery Date'), iModa = col('Moda'),
           iFul = col('SLA FULFILL'), iOta = col('SLA OTA'), iOtd = col('SLA OTD');
 
     const CAP = { WINGBOX:42,'CONT-40':50,TRAILER:42,FUSO:34,'CONT-20':25,CDDL:16,CDD:13,CDEL:11,
@@ -101,6 +108,8 @@ const DataSource = {
       if (!row || row.length < header.length) continue;
       const origin = this.normOrigin(row[iSite]);
       if (!origin) continue;
+      const moda = this.normModa(row[iModa]);
+      if (!moda) continue;                         // exclude LCL & lainnya
       let tujuan = String(row[iTuj] || '').toUpperCase().trim();
       if (!tujuan) continue;
       tujuan = this.TUJUAN_ALIAS[tujuan] || tujuan;
@@ -112,11 +121,11 @@ const DataSource = {
       const ota = String(row[iOta]||'').toUpperCase().trim() === 'HIT' ? 1 : 0;
       const ful = String(row[iFul]||'').toUpperCase().trim() === 'HIT' ? 1 : 0;
       const otd = String(row[iOtd]||'').toUpperCase().trim() === 'HIT' ? 1 : 0;
-      trips.push({ o:origin, t:tujuan, ty:type, v:vendor, p:pulau, m:dm.month, ota, ful, otd });
+      trips.push({ o:origin, t:tujuan, ty:type, v:vendor, p:pulau, md:moda, m:dm.month, ota, ful, otd });
       monthsSet.add(dm.month); if (pulau) pulauSet.add(pulau);
       if (ful === 1) {
         const cap = (CAP[type] || 0) * LOAD;
-        supply.push({ t:tujuan, o:origin, ty:type, v:vendor, w:dm.week, m:dm.month, cap:Math.round(cap*1000)/1000, unit:1, alloc:0 });
+        supply.push({ t:tujuan, o:origin, ty:type, v:vendor, md:moda, w:dm.week, m:dm.month, cap:Math.round(cap*1000)/1000, unit:1, alloc:0 });
       }
     }
     const months = [...monthsSet].sort((a,b)=>a-b);

@@ -49,6 +49,9 @@ def main():
     gs = gs.dropna(subset=['Tujuan','Vendor'])
     gs['Origin'] = gs['Supply site'].map(norm_origin)
     gs = gs[gs.Origin.notna()]
+    # moda: LAND/SEA saja, exclude LCL
+    gs['Moda'] = gs.Moda.astype(str).str.upper().str.strip()
+    gs = gs[gs.Moda.isin(['LAND','SEA'])]
     gs['Tujuan'] = gs.Tujuan.astype(str).str.upper().str.strip().replace(TUJUAN_ALIAS)
     gs['Type'] = gs.TYPE.map(norm_type)
     gs['Vendor'] = gs.Vendor.astype(str).str.upper().str.strip().replace({'RPL':'TEL'})
@@ -69,7 +72,7 @@ def main():
     print(f'  final: {len(gs)} trip | bulan {months} | OTA {gs.ota.mean():.1%} FUL {gs.ful.mean():.1%} OTD {gs.otd.mean():.1%}')
 
     # ---- trips.json ----
-    trips = [{'o':r.Origin,'t':r.Tujuan,'ty':r.Type,'v':r.Vendor,'p':r.Pulau,
+    trips = [{'o':r.Origin,'t':r.Tujuan,'ty':r.Type,'v':r.Vendor,'p':r.Pulau,'md':r.Moda,
               'm':int(r.M),'ota':int(r.ota),'ful':int(r.ful),'otd':int(r.otd)}
              for r in gs.itertuples()]
     # pertahankan avl & scoreOrder dari file lama kalau ada
@@ -85,7 +88,7 @@ def main():
     # ---- supply.json (hanya SLA FULFILL = HIT) ----
     sup = gs[gs.ful == 1].copy()
     sup['cap'] = sup.Type.map(CAP).fillna(0) * LOAD
-    srows = [{'t':r.Tujuan,'o':r.Origin,'ty':r.Type,'v':r.Vendor,'w':int(r.W),'m':int(r.M),
+    srows = [{'t':r.Tujuan,'o':r.Origin,'ty':r.Type,'v':r.Vendor,'md':r.Moda,'w':int(r.W),'m':int(r.M),
               'cap':round(r.cap,3),'unit':1.0,'alloc':0}
              for r in sup.itertuples()]
     contOnly = {}

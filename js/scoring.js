@@ -98,10 +98,12 @@ const Scoring = (() => {
     // group by rute
     const byRoute = {};
     const pulauOf = {};
+    const modaOf = {};
     for (const t of trips) {
       const k = `${t.o}|${t.t}|${t.ty}`;
       (byRoute[k] = byRoute[k] || []).push(t);
       if (t.p) pulauOf[`${t.t}`] = t.p;
+      if (t.md) modaOf[k] = t.md;
     }
     // sertakan juga rute yang ada di AVL walau 0 trip di window (opsional; di sini fokus yang ada trip)
     const routes = [];
@@ -111,7 +113,7 @@ const Scoring = (() => {
       const avlV = data.avl[k] || [];
       const pmap = priceData ? (priceData[k] || null) : null;
       const res = scoreRoute(byRoute[k], avlV, master, pmap);
-      routes.push({ origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, total: res.total, rows: res.rows });
+      routes.push({ origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, moda: modaOf[k] || null, total: res.total, rows: res.rows });
       // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
         if (r.trip === 0) continue;
@@ -121,7 +123,7 @@ const Scoring = (() => {
         vendorAgg[r.vendor].sumFinal += r.finalScore;
         vendorAgg[r.vendor].tujuanSet.add(t);
         vendorAgg[r.vendor].detail.push({
-          origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null,
+          origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, moda: modaOf[k] || null,
           trip: r.trip, share: r.share, isAvl: r.isAvl,
           scoreAvail: r.scoreAvail, scoreFul: r.scoreFul, scoreOta: r.scoreOta, scoreOtd: r.scoreOtd, scorePrice: r.scorePrice,
           finalScore: r.finalScore
