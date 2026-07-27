@@ -117,11 +117,12 @@ const Scoring = (() => {
       // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
         if (r.trip === 0) continue;
-        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0, detail: [], tujuanSet: new Set() };
+        if (!vendorAgg[r.vendor]) vendorAgg[r.vendor] = { vendor: r.vendor, trip: 0, routes: 0, sumFinal: 0, detail: [], tujuanSet: new Set(), modaTrip: {} };
         vendorAgg[r.vendor].trip += r.trip;
         vendorAgg[r.vendor].routes += 1;
         vendorAgg[r.vendor].sumFinal += r.finalScore;
         vendorAgg[r.vendor].tujuanSet.add(t);
+        if (modaOf[k]) vendorAgg[r.vendor].modaTrip[modaOf[k]] = (vendorAgg[r.vendor].modaTrip[modaOf[k]] || 0) + r.trip;
         vendorAgg[r.vendor].detail.push({
           origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, moda: modaOf[k] || null,
           trip: r.trip, share: r.share, isAvl: r.isAvl,
@@ -134,9 +135,18 @@ const Scoring = (() => {
     const totalTripAll = trips.length;
     const vendors = Object.values(vendorAgg).map(v => {
       v.detail.sort((a, b) => b.trip - a.trip);
-      const { tujuanSet, ...rest } = v;
+      const { tujuanSet, modaTrip, ...rest } = v;
+      const modaKeys = Object.keys(modaTrip);
+      // moda dominan (trip terbanyak); tandai kalau vendor jalan >1 moda
+      let moda = null, multiModa = false;
+      if (modaKeys.length === 1) moda = modaKeys[0];
+      else if (modaKeys.length > 1) {
+        moda = modaKeys.sort((a, b) => modaTrip[b] - modaTrip[a])[0];
+        multiModa = true;
+      }
       return { ...rest,
         tujuans: tujuanSet.size,
+        moda, multiModa,
         shareTrip: totalTripAll ? v.trip / totalTripAll : 0,
         avgFinal: v.routes ? Math.round((v.sumFinal / v.routes) * 100) / 100 : 0 };
     }).sort((a, b) => b.avgFinal - a.avgFinal || b.trip - a.trip);

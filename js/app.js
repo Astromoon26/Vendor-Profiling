@@ -246,7 +246,7 @@ function renderVendor() {
 function setVendorSub(val) { state.vendorSub = val; expandedVendor = null; naFilter = { origin:'', tujuan:'', qOrigin:'', qTujuan:'' }; render(); }
 
 /* ---- Vendor Aktif ---- */
-let vaFilter = { q: '', sortKey: 'avgFinal', sortDir: 'desc' };
+let vaFilter = { q: '', moda: '', sortKey: 'avgFinal', sortDir: 'desc' };
 function setVa(field, val) { vaFilter[field] = val; render(); }
 function sortVa(key) {
   if (vaFilter.sortKey === key) vaFilter.sortDir = vaFilter.sortDir === 'desc' ? 'asc' : 'desc';
@@ -259,14 +259,31 @@ function vaArrow(key) {
 }
 function renderVendorAktif() {
   const f = vaFilter;
-  let vendors = computed.vendors
+  const modas = Array.from(new Set(computed.vendors.flatMap(v => (v.detail||[]).map(d => d.moda)).filter(Boolean))).sort();
+  // Opsi B: kalau filter moda aktif, hitung ULANG angka vendor cuma dari rute moda itu
+  let baseVendors = computed.vendors;
+  if (f.moda) {
+    baseVendors = computed.vendors.map(v => {
+      const det = (v.detail || []).filter(d => d.moda === f.moda);
+      if (!det.length) return null;
+      const trip = det.reduce((s, d) => s + d.trip, 0);
+      const tujuans = new Set(det.map(d => d.tujuan)).size;
+      const avgFinal = Math.round((det.reduce((s, d) => s + d.finalScore, 0) / det.length) * 100) / 100;
+      return { ...v, trip, routes: det.length, tujuans, avgFinal,
+               shareTrip: computed.tripCount ? trip / computed.tripCount : 0,
+               detail: det, _moda: f.moda };
+    }).filter(Boolean);
+  }
+  let vendors = baseVendors
     .filter(v => !f.q || v.vendor.toLowerCase().includes(f.q.toLowerCase()))
     .filter(v => matchSearch(v.vendor));
   const dir = f.sortDir === 'desc' ? -1 : 1;
   vendors = vendors.slice().sort((a, b) => (a[f.sortKey] - b[f.sortKey]) * dir);
+  const optM = ['<option value="">Semua Moda</option>'].concat(modas.map(x => `<option ${x===f.moda?'selected':''} value="${x}">${x==='SEA'?'Sea':'Land'}</option>`)).join('');
 
   const toolbar = `<div class="detailtoolbar routebar">
     <div class="fld"><label>Cari Vendor</label><input type="text" value="${f.q}" oninput="setVa('q',this.value)" placeholder="ketik nama vendor…"></div>
+    <div class="fld"><label>Moda</label><select onchange="setVa('moda',this.value)">${optM}</select></div>
     <div class="fld"><label>Urutkan</label><select onchange="setVa('sortKey',this.value)">
       <option value="avgFinal" ${f.sortKey==='avgFinal'?'selected':''}>Avg Skor Akhir</option>
       <option value="trip" ${f.sortKey==='trip'?'selected':''}>Total Trip</option>
@@ -282,7 +299,10 @@ function renderVendorAktif() {
 
   if (!vendors.length) return toolbar + `<div class="empty">Tidak ada vendor pada filter ini.</div>`;
   const sh = (label, key) => `<th class="sortable" onclick="sortVa('${key}')">${label} ${vaArrow(key)}</th>`;
-  let html = toolbar + `<div class="tablewrap"><table class="vendortable"><thead><tr>
+  const modaBanner = f.moda
+    ? `<div class="modabanner">Menampilkan ranking khusus <b>${modaBadge(f.moda)}</b> — semua angka (Trip, Rute, Tujuan, Skor) dihitung ulang hanya dari rute ${f.moda==='SEA'?'laut':'darat'}.</div>`
+    : '';
+  let html = toolbar + modaBanner + `<div class="tablewrap"><table class="vendortable"><thead><tr>
     <th></th><th>#</th><th>Vendor</th>${sh('Total Trip','trip')}${sh('% Total Trip','shareTrip')}${sh('Rute Dilayani','routes')}${sh('Tujuan Dilayani','tujuans')}${sh('Avg Skor Akhir','avgFinal')}
     </tr></thead><tbody>`;
   vendors.forEach((v, i) => {
