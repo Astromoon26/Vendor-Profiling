@@ -28,12 +28,16 @@ def norm_type(x):
     s = str(x).upper().strip()
     if s in ('BIG MAMA','WBOX') or s.startswith('WINGBOX'): return 'WINGBOX'
     if s in ('CDD LONG CHASSIS','CDDLC','CDD LONG'): return 'CDDL'
+    if s in ('FUSO BOX','TOWING'): return 'FUSO'
+    if s == 'TRAILER 20': return 'CONT-20'
+    if s in ('TRAILER 40','CONT-45'): return 'CONT-40'
     if s.startswith('CONT-20'): return 'CONT-20'
     if s.startswith('CONT-40'): return 'CONT-40'
     return s
 
 def norm_origin(x):
     s = str(x).upper().strip()
+    if 'CIKANDE' in s: return None         # exclude (konsisten dg trip)
     if 'JABABEKA' in s: return 'JABABEKA'
     if 'CIKUPA' in s: return 'CIKUPA'
     if 'SIDOARJO' in s: return 'SIDOARJO'
@@ -54,19 +58,19 @@ def main():
         for n in names:
             if n in cols: return cols[n]
         raise SystemExit(f'Kolom {names} tidak ketemu. Kolom ada: {list(df.columns)}')
-    cO, cT, cTy, cV, cH = pick('origin'), pick('tujuan','destination'), pick('type','type armada','jenisarmada'), pick('vendor','carrier','carrierid'), pick('harga','price','cost')
+    cO, cT, cTy, cV, cH = pick('origin'), pick('tujuan','destination'), pick('type','type armada','jenisarmada'), pick('carrier','vendor','carrierid'), pick('harga','price','cost')
 
-    df[cO] = df[cO].map(norm_origin)
-    df[cT] = df[cT].astype(str).str.upper().str.strip().replace(TUJUAN_ALIAS)
-    df[cTy] = df[cTy].map(norm_type)
-    df[cV] = df[cV].astype(str).str.upper().str.strip().replace({'RPL':'TEL'})
-    df[cH] = pd.to_numeric(df[cH], errors='coerce')
-    df = df.dropna(subset=[cH])            # vendor tanpa harga = tidak AVL bulan itu -> dibuang
+    origins = [norm_origin(x) for x in df[cO]]
+    tujuans = [TUJUAN_ALIAS.get(str(x).upper().strip(), str(x).upper().strip()) for x in df[cT]]
+    types = [norm_type(x) for x in df[cTy]]
+    vendors = [{'RPL':'TEL'}.get(str(x).upper().strip(), str(x).upper().strip()) for x in df[cV]]
+    prices = [pd.to_numeric(str(x).replace(',', ''), errors='coerce') for x in df[cH]]
 
     out = {}
-    for _, row in df.iterrows():
-        key = f'{row[cO]}|{row[cT]}|{row[cTy]}'
-        out.setdefault(key, {})[row[cV]] = float(row[cH])
+    for O, T, Ty, V, P in zip(origins, tujuans, types, vendors, prices):
+        if O is None or pd.isna(P):
+            continue                       # origin di-exclude / harga kosong -> tidak AVL
+        out.setdefault(f'{O}|{T}|{Ty}', {})[V] = float(P)
 
     os.makedirs(PRICE_DIR, exist_ok=True)
     path = os.path.join(PRICE_DIR, f'{tag}.json')
