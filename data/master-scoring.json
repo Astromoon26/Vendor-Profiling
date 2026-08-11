@@ -131,11 +131,11 @@
   },
   "weights": {
     "_comment": "Bobot untuk skor akhir gabungan. Ubah sesuai prioritas. Total idealnya 100.",
-    "availability": 20,
-    "fulfillment": 20,
-    "ota": 20,
+    "availability": 10,
+    "fulfillment": 15,
+    "ota": 25,
     "otd": 20,
-    "price": 20,
+    "price": 30,
     "ordering": 0
   },
   "otd": [
