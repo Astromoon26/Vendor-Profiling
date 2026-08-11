@@ -2,7 +2,7 @@
    app.js — UI, state, rendering, master-scoring editor
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
-let DATA = null, MASTER = null, PRICE = null, SUPDEM = null, SUPPLY = null;
+let DATA = null, MASTER = null, PRICE = null, SUPDEM = null, SUPPLY = null, PRICE_BY_MONTH = {};
 let naFilter = { origin: '', tujuan: '', qOrigin: '', qTujuan: '' };
 let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
@@ -37,6 +37,28 @@ async function boot() {
 
   // price map opsional
   try { PRICE = await fetch('data/price.json').then(r => r.ok ? r.json() : null); } catch { PRICE = null; }
+  // arsip price per bulan (point-in-time). Coba fetch tiap bulan yg ada di data; 404 = lewati (fallback ke PRICE).
+  PRICE_BY_MONTH = {};
+  const monthsAvail = (DATA && DATA.months) ? DATA.months : [];
+  const yr = 2026;
+  // Manifest: data/price/index.json = ["2026-04","2026-06",...].
+  // Kalau manifest tidak ada -> anggap belum ada arsip sama sekali -> semua pakai fallback PRICE (tanpa nembak 404).
+  let archiveList = null;
+  try {
+    const idx = await fetch('data/price/index.json');
+    if (idx.ok) archiveList = await idx.json();
+  } catch { archiveList = null; }
+  if (Array.isArray(archiveList) && archiveList.length) {
+    await Promise.all(monthsAvail.map(async (mo) => {
+      const tag = `${yr}-${String(mo).padStart(2, '0')}`;
+      if (!archiveList.includes(tag)) return;
+      try {
+        const r = await fetch(`data/price/${tag}.json`);
+        if (r.ok) PRICE_BY_MONTH[mo] = await r.json();
+      } catch { /* fallback */ }
+    }));
+  }
+  window.__priceArchive = Object.keys(PRICE_BY_MONTH).length;
   // supply-demand (demand CBM) selalu dari JSON — di-push manual tiap bulan
   try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
 
@@ -78,7 +100,7 @@ function bindEvents() {
 }
 
 function recompute() {
-  computed = Scoring.buildAll(DATA, MASTER, state.month, PRICE);
+  computed = Scoring.buildAll(DATA, MASTER, state.month, PRICE, PRICE_BY_MONTH);
   const [lo, hi] = computed.windowMonths;
   const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
   const srcLive = (window.__dataSource || '').includes('live');

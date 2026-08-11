@@ -34,25 +34,69 @@ const Scoring = (() => {
 
   /* Hitung skor per vendor untuk satu rute (origin|tujuan|type).
      Mengembalikan array baris vendor dengan trip, share, dan 4 skor. */
-  function scoreRoute(routeTrips, avlVendors, master, priceMap) {
+  function scoreRoute(routeTrips, avlVendors, master, priceMap, priceByMonth, routeKey) {
     const total = routeTrips.length;
-    // agregasi per vendor
+    // agregasi per vendor (+ trip per bulan utk weighted price point-in-time)
     const agg = {};
     for (const t of routeTrips) {
-      if (!agg[t.v]) agg[t.v] = { trip: 0, ota: 0, ful: 0, otd: 0 };
+      if (!agg[t.v]) agg[t.v] = { trip: 0, ota: 0, ful: 0, otd: 0, byMonth: {} };
       agg[t.v].trip++; agg[t.v].ota += t.ota; agg[t.v].ful += t.ful; agg[t.v].otd += (t.otd || 0);
+      agg[t.v].byMonth[t.m] = (agg[t.v].byMonth[t.m] || 0) + 1;
     }
     const usedVendors = Object.keys(agg);
-    const allVendors = Array.from(new Set([...(avlVendors || []), ...usedVendors]));
 
-    // price range untuk rute ini (dari vendor yang punya harga)
-    const costs = [];
-    for (const v of allVendors) {
-      const c = priceMap ? priceMap[v] : null;
-      if (c != null) costs.push(c);
+    // Kumpulkan bulan-bulan yang ada di trip rute ini
+    const monthsInRoute = Array.from(new Set(routeTrips.map(t => t.m)));
+    const usePIT = priceByMonth && Object.keys(priceByMonth).length > 0;
+
+    // priceMap efektif per bulan: arsip bulan itu kalau ada, else fallback priceMap
+    const priceForMonth = (mo) => {
+      if (usePIT && priceByMonth[mo] && priceByMonth[mo][routeKey]) return priceByMonth[mo][routeKey];
+      return priceMap || null;
+    };
+
+    // AVL union: vendor yang punya harga di SALAH SATU bulan window + avlVendors statis + used
+    const avlSet = new Set(avlVendors || []);
+    if (usePIT) {
+      for (const mo of monthsInRoute) {
+        const pm = priceByMonth[mo] && priceByMonth[mo][routeKey];
+        if (pm) for (const v of Object.keys(pm)) avlSet.add(v);
+      }
+    } else if (priceMap) {
+      for (const v of Object.keys(priceMap)) avlSet.add(v);
     }
-    const pmin = costs.length ? Math.min(...costs) : null;
-    const pmax = costs.length ? Math.max(...costs) : null;
+    const allVendors = Array.from(new Set([...avlSet, ...usedVendors]));
+
+    // Hitung score price weighted-average per vendor (tiap bulan pakai harga bulan itu)
+    const priceScoreOf = (v) => {
+      if (!usePIT) {
+        // mode lama: 1 harga
+        const costs = [];
+        for (const vv of allVendors) { const c = priceMap ? priceMap[vv] : null; if (c != null) costs.push(c); }
+        const pmin = costs.length ? Math.min(...costs) : null;
+        const pmax = costs.length ? Math.max(...costs) : null;
+        const cost = priceMap ? (priceMap[v] ?? null) : null;
+        return { score: priceScore(cost, pmin, pmax, master.price), cost };
+      }
+      // point-in-time: weighted average antar bulan (bobot = trip vendor di bulan itu)
+      const a = agg[v];
+      let wsum = 0, tw = 0, lastCost = null;
+      const monthsForV = a ? Object.keys(a.byMonth).map(Number) : monthsInRoute;
+      for (const mo of monthsForV) {
+        const pm = priceForMonth(mo);
+        if (!pm) continue;
+        const costs = [];
+        for (const vv of allVendors) { const c = pm[vv]; if (c != null) costs.push(c); }
+        const pmin = costs.length ? Math.min(...costs) : null;
+        const pmax = costs.length ? Math.max(...costs) : null;
+        const cost = pm[v] ?? null;
+        if (cost != null) lastCost = cost;
+        const s = priceScore(cost, pmin, pmax, master.price);
+        const w = a ? (a.byMonth[mo] || 0) : 1;
+        wsum += s * w; tw += w;
+      }
+      return { score: tw > 0 ? wsum / tw : 0, cost: lastCost };
+    };
 
     const rows = allVendors.map(v => {
       const a = agg[v] || { trip: 0, ota: 0, ful: 0, otd: 0 };
@@ -60,13 +104,13 @@ const Scoring = (() => {
       const otaPct = a.trip > 0 ? a.ota / a.trip : 0;
       const fulPct = a.trip > 0 ? a.ful / a.trip : 0;
       const otdPct = a.trip > 0 ? a.otd / a.trip : 0;
-      const cost = priceMap ? (priceMap[v] ?? null) : null;
-      const isAvl = (avlVendors || []).includes(v);
+      const isAvl = avlSet.has(v);
       const sAvail = bandScore(share, master.availability);
       const sFul = bandScore(fulPct, master.fulfillment);
       const sOta = bandScore(otaPct, master.ota);
       const sOtd = bandScore(otdPct, master.otd || master.ota);
-      const sPrice = priceScore(cost, pmin, pmax, master.price);
+      const pr = priceScoreOf(v);
+      const sPrice = pr.score;
       // skor akhir tertimbang (5 dimensi)
       const w = master.weights;
       const wOtd = (w.otd != null ? w.otd : 0);
@@ -80,8 +124,9 @@ const Scoring = (() => {
       ) / wtotal;
       return {
         vendor: v, isAvl, trip: a.trip, share,
-        otaPct, fulPct, otdPct, cost,
-        scoreAvail: sAvail, scoreFul: sFul, scoreOta: sOta, scoreOtd: sOtd, scorePrice: sPrice,
+        otaPct, fulPct, otdPct, cost: pr.cost,
+        scoreAvail: sAvail, scoreFul: sFul, scoreOta: sOta, scoreOtd: sOtd,
+        scorePrice: Math.round(sPrice * 100) / 100,
         finalScore: Math.round(finalScore * 100) / 100
       };
     });
@@ -91,7 +136,7 @@ const Scoring = (() => {
 
   /* Bangun seluruh scoring untuk semua rute pada window tertentu.
      Return: { routes: [{origin,tujuan,type,pulau,total,rows}], vendorAgg } */
-  function buildAll(data, master, currentMonth, priceData) {
+  function buildAll(data, master, currentMonth, priceData, priceByMonth) {
     const rolling = master.rollingMonths || 3;
     const trips = filterRolling(data.trips, currentMonth, rolling);
 
@@ -112,7 +157,7 @@ const Scoring = (() => {
       const [o, t, ty] = k.split('|');
       const avlV = data.avl[k] || [];
       const pmap = priceData ? (priceData[k] || null) : null;
-      const res = scoreRoute(byRoute[k], avlV, master, pmap);
+      const res = scoreRoute(byRoute[k], avlV, master, pmap, priceByMonth, k);
       routes.push({ origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, moda: modaOf[k] || null, total: res.total, rows: res.rows });
       // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
