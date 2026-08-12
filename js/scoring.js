@@ -34,7 +34,7 @@ const Scoring = (() => {
 
   /* Hitung skor per vendor untuk satu rute (origin|tujuan|type).
      Mengembalikan array baris vendor dengan trip, share, dan 4 skor. */
-  function scoreRoute(routeTrips, avlVendors, master, priceMap, priceByMonth, routeKey) {
+  function scoreRoute(routeTrips, avlVendors, master, priceMap, priceByMonth, routeKey, windowMonths) {
     const total = routeTrips.length;
     // agregasi per vendor (+ trip per bulan utk weighted price point-in-time)
     const agg = {};
@@ -55,12 +55,20 @@ const Scoring = (() => {
       return priceMap || null;
     };
 
-    // AVL union: vendor yang punya harga di SALAH SATU bulan window + avlVendors statis + used
-    const avlSet = new Set(avlVendors || []);
+    // AVL PER-BULAN (point-in-time): vendor = AVL kalau punya harga di arsip
+    // SALAH SATU bulan window (windowMonths), lepas dari apakah dia punya trip.
+    // windowMonths di-pass dari buildAll; fallback ke bulan yang ada di trip.
+    const wMonths = (Array.isArray(windowMonths) && windowMonths.length) ? windowMonths : monthsInRoute;
+    const avlSet = new Set();
     if (usePIT) {
-      for (const mo of monthsInRoute) {
+      let anyArchive = false;
+      for (const mo of wMonths) {
         const pm = priceByMonth[mo] && priceByMonth[mo][routeKey];
-        if (pm) for (const v of Object.keys(pm)) avlSet.add(v);
+        if (pm) { anyArchive = true; for (const v of Object.keys(pm)) avlSet.add(v); }
+      }
+      // kalau TIDAK ADA arsip sama sekali di seluruh window utk rute ini -> fallback price.json
+      if (!anyArchive && priceMap) {
+        for (const v of Object.keys(priceMap)) avlSet.add(v);
       }
     } else if (priceMap) {
       for (const v of Object.keys(priceMap)) avlSet.add(v);
@@ -139,6 +147,9 @@ const Scoring = (() => {
   function buildAll(data, master, currentMonth, priceData, priceByMonth) {
     const rolling = master.rollingMonths || 3;
     const trips = filterRolling(data.trips, currentMonth, rolling);
+    // daftar bulan di window (buat cek AVL per-bulan)
+    const winMonths = [];
+    for (let m = currentMonth - rolling + 1; m <= currentMonth; m++) if (m >= 1) winMonths.push(m);
 
     // group by rute
     const byRoute = {};
@@ -157,7 +168,7 @@ const Scoring = (() => {
       const [o, t, ty] = k.split('|');
       const avlV = data.avl[k] || [];
       const pmap = priceData ? (priceData[k] || null) : null;
-      const res = scoreRoute(byRoute[k], avlV, master, pmap, priceByMonth, k);
+      const res = scoreRoute(byRoute[k], avlV, master, pmap, priceByMonth, k, winMonths);
       routes.push({ origin: o, tujuan: t, type: ty, pulau: pulauOf[t] || null, moda: modaOf[k] || null, total: res.total, rows: res.rows });
       // agregasi POV vendor + detail rute per vendor
       for (const r of res.rows) {
