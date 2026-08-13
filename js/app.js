@@ -943,7 +943,7 @@ function renderGap() {
     else if (ratio >= 0.8) status = 'Ketat';
     else status = 'Defisit';
     list.push({ tujuan, origin, dAvg, sAvg, gap, ratio, dPeak, sPeak,
-                gapPeak: sPeak - dPeak, alloc: sAlloc[k] || 0, status,
+                gapPeak: sAvg - dPeak, alloc: sAlloc[k] || 0, status,
                 contOnly: (SUPPLY.contOnly && SUPPLY.contOnly[tujuan]) ? 1 : 0 });
   }
   const f = gapFilter;
@@ -982,8 +982,9 @@ function renderGap() {
     <div class="sdbox"><span class="sdlbl">Baris</span><span class="sdval">${list.length}</span></div>
   </div>`;
   const isPeak = f.fleetBasis === 'peak';
-  const note = `<div class="sdnote">Demand = <b>rata-rata CBM per TRANSNO × Tujuan</b>. Gap = <b>Supply − Demand</b> (CBM/minggu); negatif = kapasitas kurang.
-    Kolom <b>Kebutuhan Armada</b> = unit tambahan untuk menutup gap ${isPeak?'<b class="amber">saat minggu peak</b>':'<b class="amber">di minggu rata-rata</b>'}, dihitung dari <b>kapasitas × 85%</b> load factor
+  const note = `<div class="sdnote">Demand = <b>rata-rata CBM per TRANSNO × Tujuan</b>. Gap = <b>Supply<sub>avg</sub> − Demand<sub>avg</sub></b> (CBM/minggu); negatif = kapasitas kurang.
+    <b>Gap saat Peak</b> = <b>Supply<sub>avg</sub> − Demand<sub>peak</sub></b> — menguji apakah kapasitas normal sanggup menutup lonjakan demand tertinggi (supply dianggap tetap, hanya demand yang naik ke puncak).
+    Kolom <b>Kebutuhan Armada</b> = unit tambahan untuk menutup gap ${isPeak?'<b class="amber">saat lonjakan (peak)</b>':'<b class="amber">di minggu rata-rata</b>'}, dihitung dari <b>kapasitas × 85%</b> load factor
     <span class="capchips">${Object.entries(FLEET).map(([k,v])=>`<span class="capchip">${k} ${v}\u00d785%=${(v*LOAD_FACTOR).toFixed(2)}</span>`).join('')}</span>
     <br>Tujuan di <b>Kalimantan · Sulawesi · Maluku · Papua · Kupang</b> hanya menampilkan CONT-20/CONT-40 (armada darat tidak relevan).
     Baris <span class="allocmark">⇄</span> = supply laut via Pelabuhan Jakarta (alokasi proporsional).</div>`;
