@@ -282,3 +282,30 @@ body{background:linear-gradient(180deg,#eceef1 0%,#e6e9ed 100%)}
 ::-webkit-scrollbar-thumb{background:#c0c6cf;border-radius:6px;border:3px solid var(--panel-2)}
 ::-webkit-scrollbar-thumb:hover{background:#a8afb9}
 tbody tr:hover{background:rgba(31,148,136,.05)}
+
+/* ---- Menu Kuadran ---- */
+.kuadran-wrap{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:14px}
+.kuadran-svg{flex:1 1 620px;max-width:760px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.q-star{fill:rgba(31,148,136,.10)} .q-premium{fill:rgba(201,130,10,.08)}
+.q-hemat{fill:rgba(47,111,179,.07)} .q-evaluasi{fill:rgba(209,55,46,.07)}
+.k-axis{stroke:var(--ink);stroke-width:1.5}
+.k-mid{stroke:var(--ink-dim);stroke-width:1;stroke-dasharray:4 4;opacity:.6}
+.k-tick{fill:var(--ink-dim);font-family:var(--mono);font-size:11px}
+.k-axlabel{fill:var(--ink);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px}
+.k-qlabel{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;opacity:.55}
+.k-qlabel.star{fill:var(--teal)} .k-qlabel.premium{fill:var(--amber)}
+.k-qlabel.hemat{fill:var(--blue)} .k-qlabel.evaluasi{fill:var(--red)}
+.k-dot{stroke:#fff;stroke-width:1.5;opacity:.82;cursor:pointer;transition:opacity .15s}
+.k-dot:hover{opacity:1;stroke-width:2.5}
+.d-star{fill:var(--teal)} .d-premium{fill:var(--amber)}
+.d-hemat{fill:var(--blue)} .d-evaluasi{fill:var(--red)}
+.k-dotlabel{fill:#fff;font-family:var(--mono);font-size:9px;font-weight:700;pointer-events:none}
+.kuadran-legend{flex:1 1 200px;display:flex;flex-direction:column;gap:10px;min-width:210px}
+.kq-box{background:var(--panel);border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:11px 13px;position:relative}
+.kq-box b{display:block;font-size:13px;margin-bottom:2px}
+.kq-box span{font-size:11px;color:var(--ink-dim)}
+.kq-box i{position:absolute;right:13px;top:11px;font-family:var(--mono);font-size:22px;font-weight:700;font-style:normal}
+.kq-box.star{border-left-color:var(--teal)} .kq-box.star i{color:var(--teal)}
+.kq-box.premium{border-left-color:var(--amber)} .kq-box.premium i{color:var(--amber)}
+.kq-box.hemat{border-left-color:var(--blue)} .kq-box.hemat i{color:var(--blue)}
+.kq-box.evaluasi{border-left-color:var(--red)} .kq-box.evaluasi i{color:var(--red)}

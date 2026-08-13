@@ -623,6 +623,156 @@ function priceExplainer() {
     </div>
   </div>`;
 }
+let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1 };
+function setKuadran(field, val) {
+  kuadranFilter[field] = (field === 'minTrip') ? (+val || 0) : val;
+  render();
+}
+
+// Performa (0-5) dari 4 skor non-price, tertimbang bobot Master Scoring (dinormalisasi tanpa price)
+function performaOf(sAvail, sFul, sOta, sOtd) {
+  const w = MASTER.weights;
+  const wt = (w.availability + w.fulfillment + w.ota + (w.otd || 0)) || 1;
+  return (sAvail * w.availability + sFul * w.fulfillment + sOta * w.ota + sOtd * (w.otd || 0)) / wt;
+}
+
+// Kumpulkan titik kuadran (agregat vendor / per rute), tertimbang trip
+function kuadranPoints() {
+  const f = kuadranFilter;
+  const pts = [];
+  if (f.mode === 'route') {
+    // per rute: tiap detail (vendor×rute) jadi 1 titik, dgn filter
+    for (const v of computed.vendors) {
+      for (const d of (v.detail || [])) {
+        if (d.trip < 1) continue;
+        if (f.origin && d.origin !== f.origin) continue;
+        if (f.tujuan && d.tujuan !== f.tujuan) continue;
+        if (f.type && d.type !== f.type) continue;
+        if (d.trip < f.minTrip) continue;
+        const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
+        pts.push({ label: v.vendor, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
+                   perf, price: d.scorePrice, trip: d.trip });
+      }
+    }
+  } else {
+    // agregat vendor: rata2 tertimbang trip antar rute
+    for (const v of computed.vendors) {
+      let tw = 0, wPerf = 0, wPrice = 0, twPrice = 0;
+      for (const d of (v.detail || [])) {
+        if (d.trip < 1) continue;
+        const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
+        wPerf += perf * d.trip; tw += d.trip;
+        wPrice += d.scorePrice * d.trip; twPrice += d.trip;
+      }
+      if (tw < f.minTrip) continue;
+      pts.push({ label: v.vendor, sub: `${v.routes} rute · ${tw} trip`,
+                 perf: tw ? wPerf / tw : 0, price: twPrice ? wPrice / twPrice : 0, trip: tw });
+    }
+  }
+  return pts;
+}
+
+function renderKuadran() {
+  const f = kuadranFilter;
+  // opsi filter dari detail
+  const origins = new Set(), tujuans = new Set(), types = new Set();
+  for (const v of computed.vendors) for (const d of (v.detail || [])) {
+    origins.add(d.origin); tujuans.add(d.tujuan); types.add(d.type);
+  }
+  const opt = (set, cur, ph) => `<option value="">${ph}</option>` +
+    [...set].sort().map(x => `<option ${x===cur?'selected':''} value="${x}">${x}</option>`).join('');
+
+  const routeFilters = f.mode === 'route' ? `
+    <div class="fld"><label>Origin</label><select onchange="setKuadran('origin',this.value)">${opt(origins,f.origin,'Semua')}</select></div>
+    <div class="fld"><label>Tujuan</label><select onchange="setKuadran('tujuan',this.value)">${opt(tujuans,f.tujuan,'Semua')}</select></div>
+    <div class="fld"><label>Armada</label><select onchange="setKuadran('type',this.value)">${opt(types,f.type,'Semua')}</select></div>` : '';
+
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Tampilan</label><select onchange="setKuadran('mode',this.value)">
+      <option value="vendor" ${f.mode!=='route'?'selected':''}>Agregat Vendor</option>
+      <option value="route" ${f.mode==='route'?'selected':''}>Per Rute</option>
+    </select></div>
+    ${routeFilters}
+    <div class="fld"><label>Min. Trip</label><input type="number" min="1" value="${f.minTrip}" style="min-width:70px" oninput="setKuadran('minTrip',this.value)"></div>
+  </div>`;
+
+  const pts = kuadranPoints();
+  if (!pts.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
+
+  // hitung distribusi kuadran (batas 2.5)
+  const MID = 2.5;
+  const q = { star: 0, premium: 0, hemat: 0, evaluasi: 0 };
+  for (const p of pts) {
+    const hiP = p.perf >= MID, murah = p.price >= MID;
+    if (hiP && murah) q.star++; else if (hiP && !murah) q.premium++;
+    else if (!hiP && murah) q.hemat++; else q.evaluasi++;
+  }
+
+  const chart = kuadranSVG(pts, MID);
+  const legend = `<div class="kuadran-legend">
+    <div class="kq-box star"><b>⭐ Bintang</b><span>Performa bagus + murah</span><i>${q.star}</i></div>
+    <div class="kq-box premium"><b>Premium</b><span>Bagus tapi mahal</span><i>${q.premium}</i></div>
+    <div class="kq-box hemat"><b>Hemat</b><span>Murah tapi performa kurang</span><i>${q.hemat}</i></div>
+    <div class="kq-box evaluasi"><b>⚠ Evaluasi</b><span>Mahal + performa kurang</span><i>${q.evaluasi}</i></div>
+  </div>`;
+
+  const note = `<div class="sdnote">Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
+    Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
+    Ukuran titik = jumlah trip. Garis batas di skor <b>2,5</b>. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
+
+  return toolbar + note + `<div class="kuadran-wrap">${chart}${legend}</div>`;
+}
+
+function kuadranSVG(pts, MID) {
+  const W = 720, H = 560, pad = 56;
+  const x = price => pad + (price / 5) * (W - pad * 2);
+  const y = perf => (H - pad) - (perf / 5) * (H - pad * 2);
+  const midX = x(MID), midY = y(MID);
+  const maxTrip = Math.max(...pts.map(p => p.trip), 1);
+  const r = trip => 5 + Math.sqrt(trip / maxTrip) * 22;
+
+  // kuadran background
+  let bg = `
+    <rect x="${midX}" y="${pad}" width="${W-pad-midX}" height="${midY-pad}" class="q-star"/>
+    <rect x="${pad}" y="${pad}" width="${midX-pad}" height="${midY-pad}" class="q-premium"/>
+    <rect x="${midX}" y="${midY}" width="${W-pad-midX}" height="${H-pad-midY}" class="q-hemat"/>
+    <rect x="${pad}" y="${midY}" width="${midX-pad}" height="${H-pad-midY}" class="q-evaluasi"/>`;
+
+  // grid + sumbu
+  let axis = `
+    <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" class="k-axis"/>
+    <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" class="k-axis"/>
+    <line x1="${midX}" y1="${pad}" x2="${midX}" y2="${H-pad}" class="k-mid"/>
+    <line x1="${pad}" y1="${midY}" x2="${W-pad}" y2="${midY}" class="k-mid"/>`;
+  // ticks 0-5
+  for (let i = 0; i <= 5; i++) {
+    axis += `<text x="${x(i)}" y="${H-pad+18}" class="k-tick" text-anchor="middle">${i}</text>`;
+    axis += `<text x="${pad-12}" y="${y(i)+4}" class="k-tick" text-anchor="end">${i}</text>`;
+  }
+  // label sumbu & kuadran
+  const labels = `
+    <text x="${W/2}" y="${H-14}" class="k-axlabel" text-anchor="middle">PRICE  (kanan = murah) →</text>
+    <text x="18" y="${H/2}" class="k-axlabel" text-anchor="middle" transform="rotate(-90 18 ${H/2})">PERFORMA (atas = bagus) →</text>
+    <text x="${(midX+W-pad)/2}" y="${pad+16}" class="k-qlabel star" text-anchor="middle">⭐ BINTANG</text>
+    <text x="${(pad+midX)/2}" y="${pad+16}" class="k-qlabel premium" text-anchor="middle">PREMIUM</text>
+    <text x="${(midX+W-pad)/2}" y="${H-pad-8}" class="k-qlabel hemat" text-anchor="middle">HEMAT</text>
+    <text x="${(pad+midX)/2}" y="${H-pad-8}" class="k-qlabel evaluasi" text-anchor="middle">⚠ EVALUASI</text>`;
+
+  // titik-titik (urut trip desc biar besar di belakang)
+  const sorted = pts.slice().sort((a, b) => b.trip - a.trip);
+  let dots = '';
+  for (const p of sorted) {
+    const hiP = p.perf >= MID, murah = p.price >= MID;
+    const cls = hiP && murah ? 'd-star' : hiP ? 'd-premium' : murah ? 'd-hemat' : 'd-evaluasi';
+    const cx = x(p.price), cy = y(p.perf), rr = r(p.trip);
+    dots += `<circle cx="${cx}" cy="${cy}" r="${rr}" class="k-dot ${cls}"><title>${p.label} — ${p.sub}\nPerforma ${p.perf.toFixed(2)} · Price ${p.price.toFixed(2)} · ${p.trip} trip</title></circle>`;
+    if (rr > 12) dots += `<text x="${cx}" y="${cy+3}" class="k-dotlabel" text-anchor="middle">${p.label}</text>`;
+  }
+
+  return `<svg viewBox="0 0 ${W} ${H}" class="kuadran-svg" preserveAspectRatio="xMidYMid meet">
+    ${bg}${axis}${labels}${dots}</svg>`;
+}
+
 function renderMaster() {
   const w = MASTER.weights;
   const weightRows = ['availability','fulfillment','ota','otd','price'].map(k =>
@@ -1037,12 +1187,13 @@ function render() {
   renderKpis();
   const view = document.getElementById('view');
   const kpiEl = document.getElementById('kpis');
-  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem') ? 'none' : '';
+  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem' || state.tab === 'kuadran') ? 'none' : '';
   if (state.tab === 'ranking') view.innerHTML = renderRanking();
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
   else if (state.tab === 'supdem') view.innerHTML = renderSupDemTab();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
+  else if (state.tab === 'kuadran') view.innerHTML = renderKuadran();
   // pulihkan fokus
   if (focusInfo) {
     const flds = document.querySelectorAll('.detailtoolbar .fld');
