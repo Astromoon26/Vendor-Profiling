@@ -3,18 +3,18 @@
    Palette: deep slate + amber signal + cargo-teal
    ============================================================ */
 :root{
-  --bg:#0f1620;            /* deep slate */
-  --panel:#161f2c;
-  --panel-2:#1d2836;
-  --line:#2a3648;
-  --ink:#e6edf5;
-  --ink-dim:#93a3b8;
-  --amber:#f2a541;        /* signal amber (score/alert) */
-  --teal:#3fb8af;         /* cargo teal (positive) */
-  --red:#e5534b;
-  --blue:#4a90d9;
-  --avl:#2e5c8a;
-  --nonavl:#a5561f;
+  --bg:#eceef1;            /* soft light grey */
+  --panel:#f7f8fa;         /* card surface */
+  --panel-2:#e4e7ec;       /* raised/subtle grey */
+  --line:#d0d5dd;          /* hairline border */
+  --ink:#1c2430;           /* primary text (dark slate) */
+  --ink-dim:#5b6673;       /* secondary text */
+  --amber:#c9820a;         /* signal amber, darkened for light bg contrast */
+  --teal:#1f9488;          /* cargo teal, darkened for light bg contrast */
+  --red:#d1372e;
+  --blue:#2f6fb3;
+  --avl:#3d6fa0;
+  --nonavl:#b05f22;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
 }
@@ -60,7 +60,7 @@ a{color:var(--teal)}
 }
 .ctrl select:focus,.ctrl input:focus{outline:2px solid var(--teal);outline-offset:-1px}
 .btn{
-  background:var(--amber);color:#1a1200;border:none;border-radius:4px;
+  background:var(--amber);color:#fff;border:none;border-radius:4px;
   padding:8px 16px;font-weight:600;font-size:13px;cursor:pointer;font-family:var(--sans);
 }
 .btn:hover{filter:brightness(1.08)}
@@ -96,17 +96,17 @@ tbody td{padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap
 tbody tr:hover{background:var(--panel-2)}
 .mono{font-family:var(--mono)}
 .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:3px;font-weight:600}
-.tag.avl{background:rgba(46,92,138,.3);color:#7fb2e6;border:1px solid var(--avl)}
-.tag.nonavl{background:rgba(165,86,31,.25);color:#e0a878;border:1px solid var(--nonavl)}
+.tag.avl{background:rgba(61,111,160,.12);color:#2f6fb3;border:1px solid var(--avl)}
+.tag.nonavl{background:rgba(176,95,34,.12);color:#b05f22;border:1px solid var(--nonavl)}
 .score{font-family:var(--mono);font-weight:700;text-align:center;display:inline-block;min-width:22px;border-radius:3px;padding:1px 0}
-.s5{color:#0f1620;background:var(--teal)} .s4{color:#0f1620;background:#8fd4ce}
+.s5{color:#fff;background:var(--teal)} .s4{color:#0f3d38;background:#7fc9c0}
 .s3{color:var(--ink);background:var(--panel-2);border:1px solid var(--line)}
-.s2{color:#1a1200;background:#e0b877} .s1{color:#fff;background:var(--red)} .s0{color:var(--ink-dim)}
+.s2{color:#3d2800;background:#e0b877} .s1{color:#fff;background:var(--red)} .s0{color:var(--ink-dim)}
 .final{font-family:var(--mono);font-weight:700;color:var(--amber)}
 .klas{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px}
 .klas.mono-k{background:var(--red);color:#fff}
-.klas.dom{background:var(--amber);color:#1a1200}
-.klas.terb{background:var(--teal);color:#0f1620}
+.klas.dom{background:var(--amber);color:#fff}
+.klas.terb{background:var(--teal);color:#fff}
 
 /* ---- Master editor ---- */
 .editor{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
@@ -119,7 +119,7 @@ tbody tr:hover{background:var(--panel-2)}
 .note{font-size:12px;color:var(--ink-dim);margin-top:8px;line-height:1.5}
 .savebar{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
 .empty{padding:40px;text-align:center;color:var(--ink-dim);font-family:var(--mono)}
-.toast{position:fixed;bottom:24px;right:24px;background:var(--teal);color:#0f1620;padding:12px 20px;border-radius:6px;font-weight:600;font-family:var(--mono);font-size:13px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--teal);color:#fff;padding:12px 20px;border-radius:6px;font-weight:600;font-family:var(--mono);font-size:13px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s}
 .toast.show{opacity:1;transform:none}
 @media (max-width:640px){.controls{flex-direction:column;align-items:stretch}.ctrl select,.ctrl input{min-width:0;width:100%}}
 
@@ -214,9 +214,9 @@ td.teal{color:var(--teal)} td.amber{color:var(--amber)}
 
 /* ---- Gap Analysis ---- */
 .klas.st-def{background:var(--red);color:#fff}
-.klas.st-ket{background:var(--amber);color:#1a1f28}
-.klas.st-sur{background:var(--teal);color:#0d1117}
-.klas.st-nos{background:#7a3b2e;color:#f0d5cd}
+.klas.st-ket{background:var(--amber);color:#fff}
+.klas.st-sur{background:var(--teal);color:#fff}
+.klas.st-nos{background:#e8d0c8;color:#8a3b2a;border:1px solid #d4a89a}
 .klas.st-nod{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line)}
 .allocmark{color:var(--amber);font-weight:700;cursor:help}
 tr.allocrow td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
@@ -230,7 +230,7 @@ td.red,.sdval .red,b.red{color:var(--red)}
 /* ---- Konversi gap ke armada ---- */
 th.grouphdr{background:var(--panel-2);color:var(--amber);font-size:9px;text-align:center;letter-spacing:1px;border-bottom:1px solid var(--amber)}
 td.need{color:var(--ink);font-weight:700;background:rgba(212,160,23,.07)}
-td.na{color:#3d4653;background:rgba(0,0,0,.15)}
+td.na{color:#9aa5b1;background:rgba(0,0,0,.04)}
 .seamark{color:var(--teal);font-size:11px;cursor:help}
 td.basisactive{box-shadow:inset 0 0 0 1px rgba(212,160,23,.35);background:rgba(212,160,23,.06)}
 
@@ -241,7 +241,7 @@ td.basisactive{box-shadow:inset 0 0 0 1px rgba(212,160,23,.35);background:rgba(2
 .note.tight{margin:0 0 14px;line-height:1.7}
 .steps{display:flex;flex-direction:column;gap:9px;margin-bottom:16px}
 .step{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--ink);line-height:1.65}
-.stepno{flex:none;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#1a1f28;
+.stepno{flex:none;width:20px;height:20px;border-radius:50%;background:var(--amber);color:#fff;
   font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
 .formula{display:inline-block;font-family:var(--mono);font-size:11.5px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:4px;padding:3px 9px;margin-top:4px;color:var(--teal)}
@@ -265,11 +265,20 @@ td.basisactive{box-shadow:inset 0 0 0 1px rgba(212,160,23,.35);background:rgba(2
 /* ---- badge moda Land/Sea ---- */
 .modabadge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;
   text-transform:uppercase;letter-spacing:.5px;border-radius:3px;padding:2px 8px}
-.moda-land{background:rgba(180,140,60,.15);color:#d4a84b;border:1px solid rgba(180,140,60,.35)}
-.moda-sea{background:rgba(70,130,180,.15);color:#5b9bd5;border:1px solid rgba(70,130,180,.35)}
+.moda-land{background:rgba(180,140,60,.14);color:#8a6410;border:1px solid rgba(180,140,60,.4)}
+.moda-sea{background:rgba(47,111,179,.12);color:#2f6fb3;border:1px solid rgba(47,111,179,.4)}
 .multimoda{color:var(--amber);font-weight:700;font-size:11px}
 
 /* ---- banner moda di Vendor Aktif (opsi B) ---- */
 .modabanner{background:rgba(70,130,180,.08);border:1px solid rgba(70,130,180,.25);
   border-radius:6px;padding:9px 14px;margin-bottom:12px;font-size:12.5px;color:var(--ink);line-height:1.6}
 .modabanner b .modabadge{vertical-align:middle}
+
+/* ---- light theme polish ---- */
+.kpi,.tablewrap,.editcard{box-shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04)}
+body{background:linear-gradient(180deg,#eceef1 0%,#e6e9ed 100%)}
+::-webkit-scrollbar{width:12px;height:12px}
+::-webkit-scrollbar-track{background:var(--panel-2)}
+::-webkit-scrollbar-thumb{background:#c0c6cf;border-radius:6px;border:3px solid var(--panel-2)}
+::-webkit-scrollbar-thumb:hover{background:#a8afb9}
+tbody tr:hover{background:rgba(31,148,136,.05)}
