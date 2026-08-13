@@ -309,3 +309,22 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
 .kq-box.premium{border-left-color:var(--amber)} .kq-box.premium i{color:var(--amber)}
 .kq-box.hemat{border-left-color:var(--blue)} .kq-box.hemat i{color:var(--blue)}
 .kq-box.evaluasi{border-left-color:var(--red)} .kq-box.evaluasi i{color:var(--red)}
+
+/* ---- Kuadran: daftar vendor per kelompok ---- */
+.kuadran-legend{flex:1 1 280px;min-width:260px;max-width:340px}
+.kq-box .kq-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1px}
+.kq-box .kq-head b{font-size:13px}
+.kq-box .kq-head i{font-family:var(--mono);font-size:20px;font-weight:700;font-style:normal}
+.kq-desc{font-size:10.5px;color:var(--ink-dim);display:block;margin-bottom:7px}
+.kq-box.star .kq-head i{color:var(--teal)} .kq-box.premium .kq-head i{color:var(--amber)}
+.kq-box.hemat .kq-head i{color:var(--blue)} .kq-box.evaluasi .kq-head i{color:var(--red)}
+.kqv-list{display:flex;flex-wrap:wrap;gap:4px}
+.kqv{font-family:var(--mono);font-size:10px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:3px;padding:2px 6px;color:var(--ink);white-space:nowrap}
+.kqv-sub{color:var(--ink-dim);font-size:9px;margin-left:3px}
+.kqv-empty{font-size:11px;color:var(--ink-dim)}
+.kq-box.unused{border-left-color:var(--ink-dim)}
+.kq-box.unused .kq-head i{color:var(--ink-dim)}
+.kq-box.unused .kqv{border-style:dashed;color:var(--ink-dim)}
+.kq-window{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--teal);
+  background:rgba(31,148,136,.08);border:1px solid rgba(31,148,136,.2);border-radius:3px;padding:1px 8px;margin-right:6px}

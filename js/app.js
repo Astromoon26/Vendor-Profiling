@@ -672,6 +672,26 @@ function kuadranPoints() {
   return pts;
 }
 
+// Vendor "tidak terpakai": punya harga di Master Price pada window aktif (=AVL)
+// tapi 0 trip sama sekali di window ini.
+function kuadranUnused() {
+  const [lo, hi] = computed.windowMonths;
+  // vendor yg AVL di window (ada harga di arsip bulan window / fallback price.json)
+  const avlSet = new Set();
+  const monthsArchived = [];
+  for (let m = lo; m <= hi; m++) if (PRICE_BY_MONTH && PRICE_BY_MONTH[m]) monthsArchived.push(m);
+  if (monthsArchived.length) {
+    for (const m of monthsArchived)
+      for (const k of Object.keys(PRICE_BY_MONTH[m]))
+        for (const v of Object.keys(PRICE_BY_MONTH[m][k])) avlSet.add(v);
+  }
+  // fallback price.json utk melengkapi (rute yg gak ada arsip)
+  if (PRICE) for (const k of Object.keys(PRICE)) for (const v of Object.keys(PRICE[k])) avlSet.add(v);
+  // vendor yg punya trip di window
+  const activeSet = new Set(computed.vendors.filter(v => v.trip > 0).map(v => v.vendor));
+  return [...avlSet].filter(v => !activeSet.has(v)).sort();
+}
+
 function renderKuadran() {
   const f = kuadranFilter;
   // opsi filter dari detail
@@ -699,24 +719,32 @@ function renderKuadran() {
   const pts = kuadranPoints();
   if (!pts.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
 
-  // hitung distribusi kuadran (batas 2.5)
-  const MID = 2.5;
+  // kelompokkan nama vendor per kuadran (buat daftar di panel kanan)
+  const groups = { star: [], premium: [], hemat: [], evaluasi: [] };
   const q = { star: 0, premium: 0, hemat: 0, evaluasi: 0 };
+  // buat agregat: 1 vendor 1 kali. buat per-rute: pakai label+sub biar gak dobel
   for (const p of pts) {
-    const hiP = p.perf >= MID, murah = p.price >= MID;
-    if (hiP && murah) q.star++; else if (hiP && !murah) q.premium++;
-    else if (!hiP && murah) q.hemat++; else q.evaluasi++;
+    const hiP = p.perf >= MID_(), murah = p.price >= MID_();
+    const key = hiP && murah ? 'star' : hiP ? 'premium' : murah ? 'hemat' : 'evaluasi';
+    q[key]++;
+    groups[key].push(f.mode === 'route' ? `${p.label} <span class="kqv-sub">${p.sub}</span>` : p.label);
   }
+  function MID_() { return 2.5; }
 
-  const chart = kuadranSVG(pts, MID);
+  const chart = kuadranSVG(pts, 2.5);
+  const chip = (arr) => arr.length ? `<div class="kqv-list">${arr.map(v => `<span class="kqv">${v}</span>`).join('')}</div>` : `<div class="kqv-empty">—</div>`;
   const legend = `<div class="kuadran-legend">
-    <div class="kq-box star"><b>⭐ Bintang</b><span>Performa bagus + murah</span><i>${q.star}</i></div>
-    <div class="kq-box premium"><b>Premium</b><span>Bagus tapi mahal</span><i>${q.premium}</i></div>
-    <div class="kq-box hemat"><b>Hemat</b><span>Murah tapi performa kurang</span><i>${q.hemat}</i></div>
-    <div class="kq-box evaluasi"><b>⚠ Evaluasi</b><span>Mahal + performa kurang</span><i>${q.evaluasi}</i></div>
+    <div class="kq-box star"><div class="kq-head"><b>⭐ Strategic Partner</b><i>${q.star}</i></div><span class="kq-desc">Performa bagus + murah</span>${chip(groups.star)}</div>
+    <div class="kq-box premium"><div class="kq-head"><b>Premium Partner</b><i>${q.premium}</i></div><span class="kq-desc">Bagus tapi mahal</span>${chip(groups.premium)}</div>
+    <div class="kq-box hemat"><div class="kq-head"><b>Contributor Partner</b><i>${q.hemat}</i></div><span class="kq-desc">Murah tapi performa kurang</span>${chip(groups.hemat)}</div>
+    <div class="kq-box evaluasi"><div class="kq-head"><b>⚠ Need Review</b><i>${q.evaluasi}</i></div><span class="kq-desc">Mahal + performa kurang</span>${chip(groups.evaluasi)}</div>
+    ${f.mode !== 'route' ? (() => { const un = kuadranUnused(); return `<div class="kq-box unused"><div class="kq-head"><b>Vendor Tidak Terpakai</b><i>${un.length}</i></div><span class="kq-desc">AVL di window ini tapi 0 trip</span>${chip(un)}</div>`; })() : ''}
   </div>`;
 
-  const note = `<div class="sdnote">Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
+  const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
+  const [wlo, whi] = computed.windowMonths;
+  const winLabel = `<span class="kq-window">Window: <b>${mName[wlo]||wlo}–${mName[whi]||whi}</b> · ${computed.tripCount.toLocaleString('id-ID')} trip</span>`;
+  const note = `<div class="sdnote">${winLabel} — Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
     Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
     Ukuran titik = jumlah trip. Garis batas di skor <b>2,5</b>. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
 
@@ -753,10 +781,10 @@ function kuadranSVG(pts, MID) {
   const labels = `
     <text x="${W/2}" y="${H-14}" class="k-axlabel" text-anchor="middle">PRICE  (kanan = murah) →</text>
     <text x="18" y="${H/2}" class="k-axlabel" text-anchor="middle" transform="rotate(-90 18 ${H/2})">PERFORMA (atas = bagus) →</text>
-    <text x="${(midX+W-pad)/2}" y="${pad+16}" class="k-qlabel star" text-anchor="middle">⭐ BINTANG</text>
-    <text x="${(pad+midX)/2}" y="${pad+16}" class="k-qlabel premium" text-anchor="middle">PREMIUM</text>
-    <text x="${(midX+W-pad)/2}" y="${H-pad-8}" class="k-qlabel hemat" text-anchor="middle">HEMAT</text>
-    <text x="${(pad+midX)/2}" y="${H-pad-8}" class="k-qlabel evaluasi" text-anchor="middle">⚠ EVALUASI</text>`;
+    <text x="${(midX+W-pad)/2}" y="${pad+16}" class="k-qlabel star" text-anchor="middle">⭐ STRATEGIC PARTNER</text>
+    <text x="${(pad+midX)/2}" y="${pad+16}" class="k-qlabel premium" text-anchor="middle">PREMIUM PARTNER</text>
+    <text x="${(midX+W-pad)/2}" y="${H-pad-8}" class="k-qlabel hemat" text-anchor="middle">CONTRIBUTOR PARTNER</text>
+    <text x="${(pad+midX)/2}" y="${H-pad-8}" class="k-qlabel evaluasi" text-anchor="middle">⚠ NEED REVIEW</text>`;
 
   // titik-titik (urut trip desc biar besar di belakang)
   const sorted = pts.slice().sort((a, b) => b.trip - a.trip);
