@@ -623,7 +623,7 @@ function priceExplainer() {
     </div>
   </div>`;
 }
-let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1 };
+let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '' };
 function setKuadran(field, val) {
   kuadranFilter[field] = (field === 'minTrip') ? (+val || 0) : val;
   render();
@@ -640,7 +640,19 @@ function performaOf(sAvail, sFul, sOta, sOtd) {
 function kuadranPoints() {
   const f = kuadranFilter;
   const pts = [];
-  if (f.mode === 'route') {
+  if (f.mode === 'byvendor') {
+    // 1 vendor terpilih: tiap rute dia jadi 1 titik
+    const v = computed.vendors.find(x => x.vendor === f.byVendor);
+    if (v) {
+      for (const d of (v.detail || [])) {
+        if (d.trip < 1) continue;
+        if (d.trip < f.minTrip) continue;
+        const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
+        pts.push({ label: `${d.tujuan}`, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
+                   perf, price: d.scorePrice, trip: d.trip });
+      }
+    }
+  } else if (f.mode === 'route') {
     // per rute: tiap detail (vendor×rute) jadi 1 titik, dgn filter
     for (const v of computed.vendors) {
       for (const d of (v.detail || [])) {
@@ -707,27 +719,39 @@ function renderKuadran() {
     <div class="fld"><label>Tujuan</label><select onchange="setKuadran('tujuan',this.value)">${opt(tujuans,f.tujuan,'Semua')}</select></div>
     <div class="fld"><label>Armada</label><select onchange="setKuadran('type',this.value)">${opt(types,f.type,'Semua')}</select></div>` : '';
 
+  // dropdown vendor (mode byvendor)
+  const vendorNames = computed.vendors.filter(v => v.trip > 0).map(v => v.vendor).sort();
+  const vendorPick = f.mode === 'byvendor' ? `
+    <div class="fld"><label>Pilih Vendor</label><select onchange="setKuadran('byVendor',this.value)">
+      <option value="">— pilih —</option>
+      ${vendorNames.map(v => `<option ${v===f.byVendor?'selected':''} value="${v}">${v}</option>`).join('')}
+    </select></div>` : '';
+
   const toolbar = `<div class="detailtoolbar routebar">
     <div class="fld"><label>Tampilan</label><select onchange="setKuadran('mode',this.value)">
-      <option value="vendor" ${f.mode!=='route'?'selected':''}>Agregat Vendor</option>
+      <option value="vendor" ${f.mode==='vendor'?'selected':''}>Agregat Vendor</option>
       <option value="route" ${f.mode==='route'?'selected':''}>Per Rute</option>
+      <option value="byvendor" ${f.mode==='byvendor'?'selected':''}>By Vendor</option>
     </select></div>
+    ${vendorPick}
     ${routeFilters}
     <div class="fld"><label>Min. Trip</label><input type="number" min="1" value="${f.minTrip}" style="min-width:70px" oninput="setKuadran('minTrip',this.value)"></div>
   </div>`;
 
   const pts = kuadranPoints();
+  if (f.mode === 'byvendor' && !f.byVendor)
+    return toolbar + `<div class="empty">Pilih vendor dulu untuk melihat sebaran rute-nya di kuadran.</div>`;
   if (!pts.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
 
-  // kelompokkan nama vendor per kuadran (buat daftar di panel kanan)
+  // kelompokkan per kuadran (buat daftar di panel kanan)
   const groups = { star: [], premium: [], hemat: [], evaluasi: [] };
   const q = { star: 0, premium: 0, hemat: 0, evaluasi: 0 };
-  // buat agregat: 1 vendor 1 kali. buat per-rute: pakai label+sub biar gak dobel
+  const showDetail = (f.mode === 'route' || f.mode === 'byvendor'); // tampilkan sub-rute
   for (const p of pts) {
     const hiP = p.perf >= MID_(), murah = p.price >= MID_();
     const key = hiP && murah ? 'star' : hiP ? 'premium' : murah ? 'hemat' : 'evaluasi';
     q[key]++;
-    groups[key].push(f.mode === 'route' ? `${p.label} <span class="kqv-sub">${p.sub}</span>` : p.label);
+    groups[key].push(showDetail ? `${p.label} <span class="kqv-sub">${p.sub}</span>` : p.label);
   }
   function MID_() { return 2.5; }
 
@@ -738,7 +762,7 @@ function renderKuadran() {
     <div class="kq-box premium"><div class="kq-head"><b>Premium Partner</b><i>${q.premium}</i></div><span class="kq-desc">Bagus tapi mahal</span>${chip(groups.premium)}</div>
     <div class="kq-box hemat"><div class="kq-head"><b>Contributor Partner</b><i>${q.hemat}</i></div><span class="kq-desc">Murah tapi performa kurang</span>${chip(groups.hemat)}</div>
     <div class="kq-box evaluasi"><div class="kq-head"><b>⚠ Need Review</b><i>${q.evaluasi}</i></div><span class="kq-desc">Mahal + performa kurang</span>${chip(groups.evaluasi)}</div>
-    ${f.mode !== 'route' ? (() => { const un = kuadranUnused(); return `<div class="kq-box unused"><div class="kq-head"><b>Vendor Tidak Terpakai</b><i>${un.length}</i></div><span class="kq-desc">AVL di window ini tapi 0 trip</span>${chip(un)}</div>`; })() : ''}
+    ${f.mode === 'vendor' ? (() => { const un = kuadranUnused(); return `<div class="kq-box unused"><div class="kq-head"><b>Vendor Tidak Terpakai</b><i>${un.length}</i></div><span class="kq-desc">AVL di window ini tapi 0 trip</span>${chip(un)}</div>`; })() : ''}
   </div>`;
 
   const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
@@ -746,7 +770,7 @@ function renderKuadran() {
   const winLabel = `<span class="kq-window">Window: <b>${mName[wlo]||wlo}–${mName[whi]||whi}</b> · ${computed.tripCount.toLocaleString('id-ID')} trip</span>`;
   const note = `<div class="sdnote">${winLabel} — Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
     Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
-    Ukuran titik = jumlah trip. Garis batas di skor <b>2,5</b>. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
+    Ukuran titik = jumlah trip. Garis batas di skor <b>2,5</b>. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
 
   return toolbar + note + `<div class="kuadran-wrap">${chart}${legend}</div>`;
 }
