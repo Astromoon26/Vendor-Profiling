@@ -154,6 +154,84 @@ function renderKpis() {
 /* ---------- Tab: Route ---------- */
 let routeFilter = { origin: '', tujuan: '', type: '', moda: '', qOrigin: '', qTujuan: '' };
 function setRoute(field, val) { routeFilter[field] = val; render(); }
+// Ambil routes tab Route sesuai filter aktif (dipakai render & export)
+function getFilteredRoutes() {
+  const f = routeFilter;
+  let routes = computed.routes.filter(filterPulau)
+    .map(r => ({ ...r, rows: r.rows.filter(x => x.trip > 0) }))
+    .filter(r => r.rows.length > 0);
+  routes = routes.filter(r =>
+    (!f.origin || r.origin === f.origin) &&
+    (!f.tujuan || r.tujuan === f.tujuan) &&
+    (!f.type || r.type === f.type) &&
+    (!f.moda || r.moda === f.moda) &&
+    (!f.qOrigin || r.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
+    (!f.qTujuan || r.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
+  ).filter(r => matchSearch(r.tujuan, r.origin, ...r.rows.map(x => x.vendor)))
+   .sort((a, b) => b.total - a.total);
+  return routes;
+}
+
+function exportRouteCSV() {
+  const routes = getFilteredRoutes();
+  if (!routes.length) { toast('Tidak ada data untuk diexport'); return; }
+  const [lo, hi] = computed.windowMonths;
+  const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
+  const win = `${mName[lo]||lo}-${mName[hi]||hi}`;
+  const w = MASTER.weights;
+
+  const headers = ['Origin','Tujuan','Type','Moda','Pulau','Total Trip Rute','Vendor','Status AVL',
+    'Trip','Share %','OTA %','Fulfill %','OTD %','Harga',
+    'Skor Prop','Skor Fulfill','Skor OTA','Skor OTD','Skor Price','Skor Akhir'];
+  const esc = (v) => {
+    if (v == null) return '';
+    const s = String(v);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(',')];
+  for (const r of routes) {
+    for (const v of r.rows) {
+      lines.push([
+        r.origin, r.tujuan, r.type, r.moda || '', r.pulau || '', r.total,
+        v.vendor, v.isAvl ? 'AVL' : 'NON-AVL', v.trip,
+        (v.share * 100).toFixed(1), (v.otaPct * 100).toFixed(1),
+        (v.fulPct * 100).toFixed(1), (v.otdPct * 100).toFixed(1),
+        v.cost != null ? Math.round(v.cost) : '',
+        v.scoreAvail, v.scoreFul, v.scoreOta, v.scoreOtd, v.scorePrice,
+        v.finalScore.toFixed(2)
+      ].map(esc).join(','));
+    }
+  }
+  // metadata di baris atas (komentar)
+  const meta = [
+    `# Skor Vendor per Rute - Window ${win} (${computed.tripCount} trip)`,
+    `# Bobot: Prop ${w.availability} / Fulfill ${w.fulfillment} / OTA ${w.ota} / OTD ${w.otd||0} / Price ${w.price}`,
+    `# Filter aktif: ${describeRouteFilter()}`,
+    ''
+  ];
+  const csv = '\uFEFF' + meta.join('\n') + lines.join('\n');   // BOM biar Excel baca UTF-8
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `Skor_Per_Rute_${win}_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const nRows = lines.length - 1;
+  toast(`${nRows} baris diexport (${routes.length} rute)`);
+}
+
+function describeRouteFilter() {
+  const f = routeFilter; const parts = [];
+  if (f.origin) parts.push(`Origin=${f.origin}`);
+  if (f.tujuan) parts.push(`Tujuan=${f.tujuan}`);
+  if (f.type) parts.push(`Armada=${f.type}`);
+  if (f.moda) parts.push(`Moda=${f.moda}`);
+  if (f.qOrigin) parts.push(`cariOrigin=${f.qOrigin}`);
+  if (f.qTujuan) parts.push(`cariTujuan=${f.qTujuan}`);
+  if (state.pulau && state.pulau !== 'Semua') parts.push(`Pulau=${state.pulau}`);
+  return parts.length ? parts.join(', ') : 'Semua rute';
+}
+
 function renderRanking() {
   const f = routeFilter;
   // hanya vendor yang punya trip
@@ -165,16 +243,8 @@ function renderRanking() {
   const tujuans = Array.from(new Set(routes.map(r => r.tujuan))).sort();
   const types = Array.from(new Set(routes.map(r => r.type))).sort();
   const modas = Array.from(new Set(routes.map(r => r.moda).filter(Boolean))).sort();
-  // terapkan filter toolbar + search global
-  routes = routes.filter(r =>
-    (!f.origin || r.origin === f.origin) &&
-    (!f.tujuan || r.tujuan === f.tujuan) &&
-    (!f.type || r.type === f.type) &&
-    (!f.moda || r.moda === f.moda) &&
-    (!f.qOrigin || r.origin.toLowerCase().includes(f.qOrigin.toLowerCase())) &&
-    (!f.qTujuan || r.tujuan.toLowerCase().includes(f.qTujuan.toLowerCase()))
-  ).filter(r => matchSearch(r.tujuan, r.origin, ...r.rows.map(x => x.vendor)))
-   .sort((a, b) => b.total - a.total);
+  // terapkan filter toolbar + search global (via helper biar sama dg export)
+  routes = getFilteredRoutes();
 
   const opt = (arr, sel) => ['<option value="">Semua</option>']
     .concat(arr.map(x => `<option ${x===sel?'selected':''}>${x}</option>`)).join('');
@@ -185,6 +255,7 @@ function renderRanking() {
     <div class="fld"><label>Tujuan</label><select onchange="setRoute('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
     <div class="fld"><label>Type Armada</label><select onchange="setRoute('type',this.value)">${opt(types,f.type)}</select></div>
     <div class="fld"><label>Moda</label><select onchange="setRoute('moda',this.value)">${opt(modas,f.moda)}</select></div>
+    <div class="fld"><label>&nbsp;</label><button class="btn-export" onclick="exportRouteCSV()">⬇ Export CSV</button></div>
   </div>`;
 
   if (!routes.length) return toolbar + `<div class="empty">Tidak ada rute pada filter ini.</div>`;

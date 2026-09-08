@@ -328,3 +328,10 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
 .kq-box.unused .kqv{border-style:dashed;color:var(--ink-dim)}
 .kq-window{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--teal);
   background:rgba(31,148,136,.08);border:1px solid rgba(31,148,136,.2);border-radius:3px;padding:1px 8px;margin-right:6px}
+
+/* ---- tombol export ---- */
+.btn-export{background:var(--teal);color:#fff;border:none;border-radius:6px;padding:8px 16px;
+  font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;
+  transition:filter .15s;height:34px}
+.btn-export:hover{filter:brightness(1.08)}
+.btn-export:active{filter:brightness(.95)}
