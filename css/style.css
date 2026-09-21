@@ -343,3 +343,7 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
 .sea-diff{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--red)}
 .chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;height:34px;white-space:nowrap}
 .chk input{cursor:pointer}
+
+.sea-stale{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:700;
+  background:rgba(201,130,10,.14);color:#8a6410;border:1px solid rgba(201,130,10,.35);
+  border-radius:3px;padding:1px 5px;margin-left:4px}

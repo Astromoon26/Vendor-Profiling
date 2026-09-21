@@ -781,18 +781,37 @@ function kuadranUnused() {
   return [...avlSet].filter(v => !activeSet.has(v)).sort();
 }
 
-// ambil harga vendor utk rute Sea, origin JAKARTA = rata Jababeka & Cikupa
-function seaPriceOf(origin, tujuan, type, vendor, priceMap) {
+// ambil harga vendor utk rute Sea, origin JAKARTA = rata Jababeka & Cikupa.
+// Carry-forward: kalau bulan terpilih tak ada, mundur ke arsip bulan sebelumnya
+// (sejauh apapun), lalu fallback price.json. Return {harga, fromMonth} — fromMonth
+// null kalau dari fallback, atau angka bulan asal harga (buat nandai 'harga lama').
+function seaPriceRaw(origin, tujuan, type, vendor, pm) {
   const get = (o) => {
-    const pm = priceMap[`${o}|${tujuan}|${type}`];
-    return pm && pm[vendor] != null ? pm[vendor] : null;
+    const m = pm && pm[`${o}|${tujuan}|${type}`];
+    return m && m[vendor] != null ? m[vendor] : null;
   };
   if (origin === 'JAKARTA') {
     const a = get('JABABEKA'), b = get('CIKUPA');
     if (a != null && b != null) return (a + b) / 2;
-    return a != null ? a : b;   // salah satu yg ada
+    return a != null ? a : b;
   }
-  return get(origin);   // SIDOARJO
+  return get(origin);
+}
+function seaPriceOf(origin, tujuan, type, vendor, selMonth) {
+  // 1) coba bulan terpilih
+  let pm = (selMonth && PRICE_BY_MONTH[selMonth]) ? PRICE_BY_MONTH[selMonth] : null;
+  let h = pm ? seaPriceRaw(origin, tujuan, type, vendor, pm) : null;
+  if (h != null) return { harga: h, fromMonth: selMonth, stale: false };
+  // 2) carry-forward: mundur ke arsip bulan-bulan sebelum selMonth (terbaru dulu)
+  const months = Object.keys(PRICE_BY_MONTH).map(Number).filter(m => m < selMonth).sort((a,b)=>b-a);
+  for (const m of months) {
+    h = seaPriceRaw(origin, tujuan, type, vendor, PRICE_BY_MONTH[m]);
+    if (h != null) return { harga: h, fromMonth: m, stale: true };
+  }
+  // 3) fallback price.json
+  h = PRICE ? seaPriceRaw(origin, tujuan, type, vendor, PRICE) : null;
+  if (h != null) return { harga: h, fromMonth: null, stale: true };
+  return { harga: null, fromMonth: null, stale: false };
 }
 
 let seaFilter = { origin: '', tujuan: '', type: '', pelayaran: '', month: '', onlyMulti: true };
@@ -810,13 +829,12 @@ function renderSea() {
   const archMonths = Object.keys(PRICE_BY_MONTH).map(Number).sort((a,b)=>a-b);
   const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
   const selMonth = f.month ? +f.month : (archMonths.length ? archMonths[archMonths.length-1] : 0);
-  const priceMap = (selMonth && PRICE_BY_MONTH[selMonth]) ? PRICE_BY_MONTH[selMonth] : (PRICE || {});
 
-  // gabung sea data + harga
-  let rows = SEA_DATA.map(x => ({
-    ...x,
-    harga: seaPriceOf(x.origin, x.tujuan, x.type, x.vendor, priceMap)
-  }));
+  // gabung sea data + harga (carry-forward, tandai stale)
+  let rows = SEA_DATA.map(x => {
+    const pr = seaPriceOf(x.origin, x.tujuan, x.type, x.vendor, selMonth);
+    return { ...x, harga: pr.harga, stale: pr.stale, fromMonth: pr.fromMonth };
+  });
 
   // opsi filter
   const origins = [...new Set(SEA_DATA.map(x=>x.origin))].sort();
@@ -866,7 +884,8 @@ function renderSea() {
 
   const note = `<div class="sdnote">Analisa harga antar vendor yang memakai <b>pelayaran (shipping line) yang sama</b> per Tujuan × Armada (moda Sea).
     Data pelayaran dari OTD 2026 (live). Harga dari Master Price <b>${f.month?mName[selMonth]+' 2026':(archMonths.length?mName[archMonths[archMonths.length-1]]+' 2026':'price.json')}</b>.
-    Origin <b>JAKARTA</b> = rata-rata harga Jababeka & Cikupa. Selisih dihitung vs vendor termurah dalam grup. Grup diurutkan dari selisih terbesar.</div>`;
+    Origin <b>JAKARTA</b> = rata-rata harga Jababeka & Cikupa. Selisih dihitung vs vendor termurah dalam grup. Grup diurutkan dari selisih terbesar.
+    Vendor tanpa harga di bulan terpilih tapi ada di bulan sebelumnya → pakai <b>harga terakhir</b> yang tersedia, ditandai <span class="sea-stale">⧖</span> + bulan asalnya.</div>`;
 
   if (!gList.length) return toolbar + note + `<div class="empty">Tidak ada grup pada filter ini.</div>`;
 
@@ -891,7 +910,7 @@ function renderSea() {
           <td class="mono" rowspan="${vs.length}">${ty}</td>
           <td rowspan="${vs.length}"><span class="pel-badge">${pel}</span></td>` : ''}
         <td class="mono">${v.vendor}</td>
-        <td class="mono">${rp(v.harga)}</td>
+        <td class="mono">${rp(v.harga)}${v.stale && v.harga!=null ? ` <span class="sea-stale" title="Harga lama (${v.fromMonth?mName[v.fromMonth]+' 2026':'arsip lama'}), vendor tak ada di Master Price bulan ini">⧖ ${v.fromMonth?mName[v.fromMonth]:'lama'}</span>` : ''}</td>
         <td>${selCell}</td>
         <td class="mono">${v.trip}</td>
       </tr>`;
@@ -906,13 +925,13 @@ function exportSeaCSV() {
   if (!SEA_DATA) { toast('Data belum termuat'); return; }
   const archMonths = Object.keys(PRICE_BY_MONTH).map(Number).sort((a,b)=>a-b);
   const selMonth = f.month ? +f.month : (archMonths.length ? archMonths[archMonths.length-1] : 0);
-  const priceMap = (selMonth && PRICE_BY_MONTH[selMonth]) ? PRICE_BY_MONTH[selMonth] : (PRICE || {});
-  let rows = SEA_DATA.map(x => ({ ...x, harga: seaPriceOf(x.origin,x.tujuan,x.type,x.vendor,priceMap) }))
+  const mNm = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
+  let rows = SEA_DATA.map(x => { const pr=seaPriceOf(x.origin,x.tujuan,x.type,x.vendor,selMonth); return { ...x, harga:pr.harga, stale:pr.stale, fromMonth:pr.fromMonth }; })
     .filter(r => (!f.origin||r.origin===f.origin)&&(!f.tujuan||r.tujuan===f.tujuan)&&(!f.type||r.type===f.type)&&(!f.pelayaran||r.pelayaran===f.pelayaran));
   const groups = {};
   for (const r of rows) { const k=`${r.origin}|${r.tujuan}|${r.type}|${r.pelayaran}`; (groups[k]=groups[k]||[]).push(r); }
   const esc = (v) => { if(v==null)return''; const s=String(v); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
-  const lines = ['Origin,Tujuan,Armada,Pelayaran,Vendor,Harga,Selisih vs Termurah,Selisih %,Trip'];
+  const lines = ['Origin,Tujuan,Armada,Pelayaran,Vendor,Harga,Harga Dari,Selisih vs Termurah,Selisih %,Trip'];
   for (const [k, vs] of Object.entries(groups)) {
     if (f.onlyMulti && new Set(vs.map(v=>v.vendor)).size < 2) continue;
     const prices = vs.filter(v=>v.harga!=null).map(v=>v.harga);
@@ -921,7 +940,8 @@ function exportSeaCSV() {
     for (const v of vs.slice().sort((a,b)=>(a.harga==null?Infinity:a.harga)-(b.harga==null?Infinity:b.harga))) {
       const sel=(v.harga!=null&&min!=null)?v.harga-min:null;
       const pc=(sel!=null&&min>0)?(sel/min*100).toFixed(0):'';
-      lines.push([o,t,ty,pel,v.vendor,v.harga!=null?Math.round(v.harga):'',sel!=null?Math.round(sel):'',pc,v.trip].map(esc).join(','));
+      const dari=v.harga==null?'':v.stale?(v.fromMonth?mNm[v.fromMonth]+' (lama)':'arsip lama'):(selMonth?mNm[selMonth]:'');
+      lines.push([o,t,ty,pel,v.vendor,v.harga!=null?Math.round(v.harga):'',dari,sel!=null?Math.round(sel):'',pc,v.trip].map(esc).join(','));
     }
   }
   const csv='\uFEFF'+lines.join('\n');
