@@ -820,6 +820,18 @@ function setSea(field, val) {
   render();
 }
 
+function setAnalyticSub(val) { state.anSub = val; render(); }
+function renderAnalyticTab() {
+  const sub = state.anSub || 'sea';
+  const bar = `<div class="subnav">
+    <label>Analisa</label>
+    <select onchange="setAnalyticSub(this.value)">
+      <option value="sea" ${sub==='sea'?'selected':''}>Compare Price Sea (antar vendor sepelayaran)</option>
+    </select>
+  </div>`;
+  return bar + (sub === 'sea' ? renderSea() : renderSea());
+}
+
 function renderSea() {
   if (!SEA_DATA || !SEA_DATA.length)
     return `<div class="empty">Data pelayaran (OTD 2026) belum termuat. Cek koneksi GSheet atau muat ulang.</div>`;
@@ -1487,14 +1499,14 @@ function render() {
   renderKpis();
   const view = document.getElementById('view');
   const kpiEl = document.getElementById('kpis');
-  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem' || state.tab === 'kuadran' || state.tab === 'sea') ? 'none' : '';
+  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem' || state.tab === 'kuadran' || state.tab === 'analytic') ? 'none' : '';
   if (state.tab === 'ranking') view.innerHTML = renderRanking();
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
   else if (state.tab === 'supdem') view.innerHTML = renderSupDemTab();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
   else if (state.tab === 'kuadran') view.innerHTML = renderKuadran();
-  else if (state.tab === 'sea') view.innerHTML = renderSea();
+  else if (state.tab === 'analytic') view.innerHTML = renderAnalyticTab();
   // pulihkan fokus
   if (focusInfo) {
     const flds = document.querySelectorAll('.detailtoolbar .fld');
