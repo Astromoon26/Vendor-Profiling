@@ -2,7 +2,7 @@
    app.js — UI, state, rendering, master-scoring editor
    ============================================================ */
 const LS_KEY = 'cargoscore_master_v1';
-let DATA = null, MASTER = null, PRICE = null, SUPDEM = null, SUPPLY = null, PRICE_BY_MONTH = {};
+let DATA = null, MASTER = null, PRICE = null, SUPDEM = null, SUPPLY = null, PRICE_BY_MONTH = {}, SEA_DATA = null;
 let naFilter = { origin: '', tujuan: '', qOrigin: '', qTujuan: '' };
 let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', vendorSub: 'aktif' };
 let computed = null;
@@ -59,6 +59,12 @@ async function boot() {
     }));
   }
   window.__priceArchive = Object.keys(PRICE_BY_MONTH).length;
+  // OTD 2026 (pelayaran) — live, buat menu Analisa Sea. Gagal = fitur nonaktif, dashboard tetap jalan.
+  SEA_DATA = null;
+  try {
+    if (typeof SeaData !== 'undefined' && SeaData.ENABLED) SEA_DATA = await SeaData.fetch();
+  } catch (e) { SEA_DATA = null; }
+  window.__seaData = SEA_DATA ? SEA_DATA.length : 0;
   // supply-demand (demand CBM) selalu dari JSON — di-push manual tiap bulan
   try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
 
@@ -775,6 +781,157 @@ function kuadranUnused() {
   return [...avlSet].filter(v => !activeSet.has(v)).sort();
 }
 
+// ambil harga vendor utk rute Sea, origin JAKARTA = rata Jababeka & Cikupa
+function seaPriceOf(origin, tujuan, type, vendor, priceMap) {
+  const get = (o) => {
+    const pm = priceMap[`${o}|${tujuan}|${type}`];
+    return pm && pm[vendor] != null ? pm[vendor] : null;
+  };
+  if (origin === 'JAKARTA') {
+    const a = get('JABABEKA'), b = get('CIKUPA');
+    if (a != null && b != null) return (a + b) / 2;
+    return a != null ? a : b;   // salah satu yg ada
+  }
+  return get(origin);   // SIDOARJO
+}
+
+let seaFilter = { origin: '', tujuan: '', type: '', pelayaran: '', month: '', onlyMulti: true };
+function setSea(field, val) {
+  seaFilter[field] = (field === 'onlyMulti') ? val : val;
+  render();
+}
+
+function renderSea() {
+  if (!SEA_DATA || !SEA_DATA.length)
+    return `<div class="empty">Data pelayaran (OTD 2026) belum termuat. Cek koneksi GSheet atau muat ulang.</div>`;
+  const f = seaFilter;
+
+  // pilih Master Price bulan mana (default: arsip terbaru, else fallback price.json)
+  const archMonths = Object.keys(PRICE_BY_MONTH).map(Number).sort((a,b)=>a-b);
+  const mName = { 1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'Mei',6:'Jun',7:'Jul',8:'Agu',9:'Sep',10:'Okt',11:'Nov',12:'Des' };
+  const selMonth = f.month ? +f.month : (archMonths.length ? archMonths[archMonths.length-1] : 0);
+  const priceMap = (selMonth && PRICE_BY_MONTH[selMonth]) ? PRICE_BY_MONTH[selMonth] : (PRICE || {});
+
+  // gabung sea data + harga
+  let rows = SEA_DATA.map(x => ({
+    ...x,
+    harga: seaPriceOf(x.origin, x.tujuan, x.type, x.vendor, priceMap)
+  }));
+
+  // opsi filter
+  const origins = [...new Set(SEA_DATA.map(x=>x.origin))].sort();
+  const tujuans = [...new Set(SEA_DATA.map(x=>x.tujuan))].sort();
+  const types = [...new Set(SEA_DATA.map(x=>x.type))].sort();
+  const pelayarans = [...new Set(SEA_DATA.map(x=>x.pelayaran))].sort();
+  const opt = (arr, cur) => `<option value="">Semua</option>` + arr.map(x=>`<option ${x===cur?'selected':''}>${x}</option>`).join('');
+  const optM = `<option value="">${archMonths.length?mName[archMonths[archMonths.length-1]]+' (terbaru)':'price.json'}</option>` +
+    archMonths.map(m=>`<option value="${m}" ${m===selMonth&&f.month?'selected':''}>${mName[m]} 2026</option>`).join('');
+
+  // terapkan filter
+  rows = rows.filter(r =>
+    (!f.origin || r.origin===f.origin) &&
+    (!f.tujuan || r.tujuan===f.tujuan) &&
+    (!f.type || r.type===f.type) &&
+    (!f.pelayaran || r.pelayaran===f.pelayaran) &&
+    matchSearch(r.tujuan, r.vendor, r.pelayaran));
+
+  // kelompokkan per Origin×Tujuan×Type×Pelayaran
+  const groups = {};
+  for (const r of rows) {
+    const k = `${r.origin}|${r.tujuan}|${r.type}|${r.pelayaran}`;
+    (groups[k] = groups[k] || []).push(r);
+  }
+  let gList = Object.entries(groups).map(([k, vs]) => {
+    const priced = vs.filter(v => v.harga != null);
+    const prices = priced.map(v => v.harga);
+    const min = prices.length ? Math.min(...prices) : null;
+    const max = prices.length ? Math.max(...prices) : null;
+    return { key: k, rows: vs, nVendor: new Set(vs.map(v=>v.vendor)).size, min, max,
+             spread: (min!=null&&max!=null) ? max-min : null };
+  });
+  // filter: cuma yg >1 vendor (biar ada yg dibandingin)
+  if (f.onlyMulti) gList = gList.filter(g => g.nVendor > 1);
+  // urut: spread terbesar dulu (paling banyak selisih)
+  gList.sort((a,b) => (b.spread||0) - (a.spread||0) || b.nVendor - a.nVendor);
+
+  const toolbar = `<div class="detailtoolbar routebar">
+    <div class="fld"><label>Origin</label><select onchange="setSea('origin',this.value)">${opt(origins,f.origin)}</select></div>
+    <div class="fld"><label>Tujuan</label><select onchange="setSea('tujuan',this.value)">${opt(tujuans,f.tujuan)}</select></div>
+    <div class="fld"><label>Armada</label><select onchange="setSea('type',this.value)">${opt(types,f.type)}</select></div>
+    <div class="fld"><label>Pelayaran</label><select onchange="setSea('pelayaran',this.value)">${opt(pelayarans,f.pelayaran)}</select></div>
+    <div class="fld"><label>Master Price</label><select onchange="setSea('month',this.value)">${optM}</select></div>
+    <div class="fld"><label>&nbsp;</label><label class="chk"><input type="checkbox" ${f.onlyMulti?'checked':''} onchange="setSea('onlyMulti',this.checked)"> Hanya multi-vendor</label></div>
+    <div class="fld"><label>&nbsp;</label><button class="btn-export" onclick="exportSeaCSV()">⬇ Export CSV</button></div>
+  </div>`;
+
+  const note = `<div class="sdnote">Analisa harga antar vendor yang memakai <b>pelayaran (shipping line) yang sama</b> per Tujuan × Armada (moda Sea).
+    Data pelayaran dari OTD 2026 (live). Harga dari Master Price <b>${f.month?mName[selMonth]+' 2026':(archMonths.length?mName[archMonths[archMonths.length-1]]+' 2026':'price.json')}</b>.
+    Origin <b>JAKARTA</b> = rata-rata harga Jababeka & Cikupa. Selisih dihitung vs vendor termurah dalam grup. Grup diurutkan dari selisih terbesar.</div>`;
+
+  if (!gList.length) return toolbar + note + `<div class="empty">Tidak ada grup pada filter ini.</div>`;
+
+  const rp = (v) => v==null ? '<span class="wkdim">—</span>' : (v/1e6).toFixed(2)+' jt';
+  let html = toolbar + note + `<div class="tablewrap"><table class="seatable"><thead><tr>
+    <th>Origin</th><th>Tujuan</th><th>Armada</th><th>Pelayaran</th>
+    <th>Vendor</th><th>Harga</th><th>Selisih vs Termurah</th><th>Trip</th>
+    </tr></thead><tbody>`;
+  for (const g of gList) {
+    const [o,t,ty,pel] = g.key.split('|');
+    // urut vendor dalam grup: termurah dulu (yg null di bawah)
+    const vs = g.rows.slice().sort((a,b) => (a.harga==null?Infinity:a.harga) - (b.harga==null?Infinity:b.harga));
+    vs.forEach((v, i) => {
+      const selisih = (v.harga!=null && g.min!=null) ? v.harga - g.min : null;
+      const pctS = (selisih!=null && g.min>0) ? (selisih/g.min*100) : null;
+      const selCell = v.harga==null ? '<span class="wkdim">tanpa harga</span>'
+        : selisih===0 ? '<span class="sea-cheap">termurah</span>'
+        : `<span class="sea-diff">+${(selisih/1e6).toFixed(2)} jt${pctS!=null?` (+${pctS.toFixed(0)}%)`:''}</span>`;
+      html += `<tr>
+        ${i===0 ? `<td class="mono" rowspan="${vs.length}">${o}</td>
+          <td rowspan="${vs.length}"><b>${t}</b></td>
+          <td class="mono" rowspan="${vs.length}">${ty}</td>
+          <td rowspan="${vs.length}"><span class="pel-badge">${pel}</span></td>` : ''}
+        <td class="mono">${v.vendor}</td>
+        <td class="mono">${rp(v.harga)}</td>
+        <td>${selCell}</td>
+        <td class="mono">${v.trip}</td>
+      </tr>`;
+    });
+  }
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+function exportSeaCSV() {
+  const f = seaFilter;
+  if (!SEA_DATA) { toast('Data belum termuat'); return; }
+  const archMonths = Object.keys(PRICE_BY_MONTH).map(Number).sort((a,b)=>a-b);
+  const selMonth = f.month ? +f.month : (archMonths.length ? archMonths[archMonths.length-1] : 0);
+  const priceMap = (selMonth && PRICE_BY_MONTH[selMonth]) ? PRICE_BY_MONTH[selMonth] : (PRICE || {});
+  let rows = SEA_DATA.map(x => ({ ...x, harga: seaPriceOf(x.origin,x.tujuan,x.type,x.vendor,priceMap) }))
+    .filter(r => (!f.origin||r.origin===f.origin)&&(!f.tujuan||r.tujuan===f.tujuan)&&(!f.type||r.type===f.type)&&(!f.pelayaran||r.pelayaran===f.pelayaran));
+  const groups = {};
+  for (const r of rows) { const k=`${r.origin}|${r.tujuan}|${r.type}|${r.pelayaran}`; (groups[k]=groups[k]||[]).push(r); }
+  const esc = (v) => { if(v==null)return''; const s=String(v); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+  const lines = ['Origin,Tujuan,Armada,Pelayaran,Vendor,Harga,Selisih vs Termurah,Selisih %,Trip'];
+  for (const [k, vs] of Object.entries(groups)) {
+    if (f.onlyMulti && new Set(vs.map(v=>v.vendor)).size < 2) continue;
+    const prices = vs.filter(v=>v.harga!=null).map(v=>v.harga);
+    const min = prices.length?Math.min(...prices):null;
+    const [o,t,ty,pel]=k.split('|');
+    for (const v of vs.slice().sort((a,b)=>(a.harga==null?Infinity:a.harga)-(b.harga==null?Infinity:b.harga))) {
+      const sel=(v.harga!=null&&min!=null)?v.harga-min:null;
+      const pc=(sel!=null&&min>0)?(sel/min*100).toFixed(0):'';
+      lines.push([o,t,ty,pel,v.vendor,v.harga!=null?Math.round(v.harga):'',sel!=null?Math.round(sel):'',pc,v.trip].map(esc).join(','));
+    }
+  }
+  const csv='\uFEFF'+lines.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=`Analisa_Sea_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast(`${lines.length-1} baris diexport`);
+}
+
 function renderKuadran() {
   const f = kuadranFilter;
   // opsi filter dari detail
@@ -1310,13 +1467,14 @@ function render() {
   renderKpis();
   const view = document.getElementById('view');
   const kpiEl = document.getElementById('kpis');
-  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem' || state.tab === 'kuadran') ? 'none' : '';
+  kpiEl.style.display = (state.tab === 'master' || state.tab === 'supdem' || state.tab === 'kuadran' || state.tab === 'sea') ? 'none' : '';
   if (state.tab === 'ranking') view.innerHTML = renderRanking();
   else if (state.tab === 'vendor') view.innerHTML = renderVendor();
   else if (state.tab === 'dominansi') view.innerHTML = renderDominansi();
   else if (state.tab === 'supdem') view.innerHTML = renderSupDemTab();
   else if (state.tab === 'master') view.innerHTML = renderMaster();
   else if (state.tab === 'kuadran') view.innerHTML = renderKuadran();
+  else if (state.tab === 'sea') view.innerHTML = renderSea();
   // pulihkan fokus
   if (focusInfo) {
     const flds = document.querySelectorAll('.detailtoolbar .fld');

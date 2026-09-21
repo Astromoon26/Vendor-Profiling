@@ -139,3 +139,74 @@ const DataSource = {
     };
   }
 };
+
+/* ============================================================
+   SeaData — data pelayaran (shipping line) dari GSheet OTD 2026
+   Buat menu "Analisa Sea": mapping vendor × rute × PELAYARAN (live).
+   Origin di-simplify: NDC Cikupa/Jababeka/Jakarta -> JAKARTA, NDC Sidoarjo -> SIDOARJO.
+   ============================================================ */
+const SeaData = {
+  ENABLED: true,
+  // GSheet OTD 2026 (publish-to-web CSV)
+  CSV_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTRWYcIMfbq-0rmBOhXbbuw9aK2-HFgDp1DQ_lZm5h43mdyMLGEHJZo3uUOrxalZpAfFbvD_b-52hvD/pub?gid=1697954294&single=true&output=csv',
+
+  normOrigin(supplySite) {
+    const s = String(supplySite || '').toUpperCase();
+    if (s.includes('SIDOARJO')) return 'SIDOARJO';
+    // Cikupa, Jababeka, Jakarta, dll -> JAKARTA
+    return 'JAKARTA';
+  },
+  normType(x) {
+    const s = String(x || '').toUpperCase().trim();
+    if (s === 'BIG MAMA' || s === 'WBOX' || s.startsWith('WINGBOX')) return 'WINGBOX';
+    if (s === 'CDD LONG CHASSIS' || s === 'CDDLC' || s === 'CDD LONG') return 'CDDL';
+    if (s === 'FUSO BOX' || s === 'TOWING') return 'FUSO';
+    if (s === 'TRAILER 20') return 'CONT-20';
+    if (s === 'TRAILER 40' || s === 'CONT-45') return 'CONT-40';
+    if (s.startsWith('CONT-20') || s === 'CONT20') return 'CONT-20';
+    if (s.startsWith('CONT-40') || s === 'CONT40') return 'CONT-40';
+    return s;
+  },
+  normVendor(v) {
+    const s = String(v || '').toUpperCase().trim();
+    return s === 'RPL' ? 'TEL' : s;
+  },
+  normTujuan(t) {
+    const s = String(t || '').toUpperCase().trim();
+    const alias = { SURABAYA:'SIDOARJO', JOGJA:'YOGYAKARTA', BANYUMAS:'PURWOKERTO', 'JAYA PURA':'JAYAPURA' };
+    return alias[s] || s;
+  },
+
+  // Ambil OTD 2026, ambil baris SEA, kembalikan daftar {origin,tujuan,type,vendor,pelayaran,vessel,trip}
+  async fetch() {
+    const res = await fetch(this.CSV_URL);
+    if (!res.ok) throw new Error('gagal fetch OTD 2026: ' + res.status);
+    const text = await res.text();
+    const rows = DataSource.parseCSV(text);
+    if (!rows.length) return [];
+    const head = rows[0].map(h => String(h).trim());
+    const idx = (name) => head.findIndex(h => h.toUpperCase() === name.toUpperCase());
+    const iSite = idx('Supply site'), iVen = idx('Vendor'), iType = idx('TYPE'),
+          iTuj = idx('Tujuan'), iModa = idx('Moda'), iPel = idx('PELAYARAN'), iVes = idx('VESSEL NAME');
+    // agregasi: hitung trip per (origin,tujuan,type,vendor,pelayaran)
+    const map = {};
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r]; if (!row || row.length <= iPel) continue;
+      const moda = String(row[iModa] || '').toUpperCase().trim();
+      if (moda !== 'SEA') continue;                       // SEA only (LCL & LAND dibuang)
+      const pel = String(row[iPel] || '').toUpperCase().trim();
+      if (!pel) continue;                                  // tanpa pelayaran, skip
+      const origin = this.normOrigin(row[iSite]);
+      const tujuan = this.normTujuan(row[iTuj]);
+      const type = this.normType(row[iType]);
+      const vendor = this.normVendor(row[iVen]);
+      const vessel = String(row[iVes] || '').trim();
+      if (!vendor || !tujuan || !type) continue;
+      const key = `${origin}|${tujuan}|${type}|${vendor}|${pel}`;
+      if (!map[key]) map[key] = { origin, tujuan, type, vendor, pelayaran: pel, vessels: new Set(), trip: 0 };
+      map[key].trip++;
+      if (vessel) map[key].vessels.add(vessel);
+    }
+    return Object.values(map).map(x => ({ ...x, vessels: [...x.vessels] }));
+  }
+};

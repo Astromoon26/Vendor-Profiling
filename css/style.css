@@ -335,3 +335,11 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
   transition:filter .15s;height:34px}
 .btn-export:hover{filter:brightness(1.08)}
 .btn-export:active{filter:brightness(.95)}
+
+/* ---- Analisa Sea ---- */
+.seatable .pel-badge{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;
+  background:rgba(47,111,179,.12);color:#2f6fb3;border:1px solid rgba(47,111,179,.35);border-radius:3px;padding:2px 8px}
+.sea-cheap{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--teal)}
+.sea-diff{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--red)}
+.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink);cursor:pointer;height:34px;white-space:nowrap}
+.chk input{cursor:pointer}
