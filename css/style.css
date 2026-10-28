@@ -290,6 +290,7 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
 .q-hemat{fill:rgba(47,111,179,.07)} .q-evaluasi{fill:rgba(209,55,46,.07)}
 .k-axis{stroke:var(--ink);stroke-width:1.5}
 .k-mid{stroke:var(--ink-dim);stroke-width:1;stroke-dasharray:4 4;opacity:.6}
+.k-midval{fill:var(--ink-dim);font-family:var(--mono);font-size:10px;font-weight:700;opacity:.85}
 .k-tick{fill:var(--ink-dim);font-family:var(--mono);font-size:11px}
 .k-axlabel{fill:var(--ink);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.5px}
 .k-qlabel{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;opacity:.55}
