@@ -700,7 +700,7 @@ function priceExplainer() {
     </div>
   </div>`;
 }
-let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '' };
+let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '', divider: 'dynamic' };
 function setKuadran(field, val) {
   kuadranFilter[field] = (field === 'minTrip') ? (+val || 0) : val;
   render();
@@ -995,6 +995,10 @@ function renderKuadran() {
     </select></div>
     ${vendorPick}
     ${routeFilters}
+    <div class="fld"><label>Garis Pembagi</label><select onchange="setKuadran('divider',this.value)">
+      <option value="dynamic" ${f.divider==='dynamic'?'selected':''}>Dinamis (rata-rata filter)</option>
+      <option value="static" ${f.divider==='static'?'selected':''}>Statis (2,5)</option>
+    </select></div>
     <div class="fld"><label>Min. Trip</label><input type="number" min="1" value="${f.minTrip}" style="min-width:70px" oninput="setKuadran('minTrip',this.value)"></div>
   </div>`;
 
@@ -1003,19 +1007,25 @@ function renderKuadran() {
     return toolbar + `<div class="empty">Pilih vendor dulu untuk melihat sebaran rute-nya di kuadran.</div>`;
   if (!pts.length) return toolbar + `<div class="empty">Tidak ada data pada filter ini.</div>`;
 
+  // garis pembagi: dinamis = rata-rata biasa dari titik yang tampil, atau statis 2,5
+  let midX = 2.5, midY = 2.5;
+  if (f.divider === 'dynamic' && pts.length) {
+    midX = pts.reduce((s, p) => s + p.price, 0) / pts.length;
+    midY = pts.reduce((s, p) => s + p.perf, 0) / pts.length;
+  }
+
   // kelompokkan per kuadran (buat daftar di panel kanan)
   const groups = { star: [], premium: [], hemat: [], evaluasi: [] };
   const q = { star: 0, premium: 0, hemat: 0, evaluasi: 0 };
   const showDetail = (f.mode === 'route' || f.mode === 'byvendor'); // tampilkan sub-rute
   for (const p of pts) {
-    const hiP = p.perf >= MID_(), murah = p.price >= MID_();
+    const hiP = p.perf >= midY, murah = p.price >= midX;
     const key = hiP && murah ? 'star' : hiP ? 'premium' : murah ? 'hemat' : 'evaluasi';
     q[key]++;
     groups[key].push(showDetail ? `${p.label} <span class="kqv-sub">${p.sub}</span>` : p.label);
   }
-  function MID_() { return 2.5; }
 
-  const chart = kuadranSVG(pts, 2.5);
+  const chart = kuadranSVG(pts, midX, midY);
   const chip = (arr) => arr.length ? `<div class="kqv-list">${arr.map(v => `<span class="kqv">${v}</span>`).join('')}</div>` : `<div class="kqv-empty">—</div>`;
   const legend = `<div class="kuadran-legend">
     <div class="kq-box star"><div class="kq-head"><b>⭐ Strategic Partner</b><i>${q.star}</i></div><span class="kq-desc">Performa bagus + murah</span>${chip(groups.star)}</div>
@@ -1030,16 +1040,16 @@ function renderKuadran() {
   const winLabel = `<span class="kq-window">Window: <b>${mName[wlo]||wlo}–${mName[whi]||whi}</b> · ${computed.tripCount.toLocaleString('id-ID')} trip</span>`;
   const note = `<div class="sdnote">${winLabel} — Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
     Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
-    Ukuran titik = jumlah trip. Garis batas di skor <b>2,5</b>. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
+    Ukuran titik = jumlah trip. Garis pembagi ${f.divider==='dynamic'?`<b>dinamis</b> = rata-rata titik tampil (Price <b>${midX.toFixed(2)}</b> · Performa <b>${midY.toFixed(2)}</b>)`:'<b>statis</b> di skor <b>2,5</b>'}. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
 
   return toolbar + note + `<div class="kuadran-wrap">${chart}${legend}</div>`;
 }
 
-function kuadranSVG(pts, MID) {
+function kuadranSVG(pts, midValX, midValY) {
   const W = 720, H = 560, pad = 56;
   const x = price => pad + (price / 5) * (W - pad * 2);
   const y = perf => (H - pad) - (perf / 5) * (H - pad * 2);
-  const midX = x(MID), midY = y(MID);
+  const midX = x(midValX), midY = y(midValY);   // posisi pixel garis pembagi (X=price, Y=performa)
   const maxTrip = Math.max(...pts.map(p => p.trip), 1);
   const r = trip => 5 + Math.sqrt(trip / maxTrip) * 22;
 
@@ -1055,7 +1065,9 @@ function kuadranSVG(pts, MID) {
     <line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" class="k-axis"/>
     <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" class="k-axis"/>
     <line x1="${midX}" y1="${pad}" x2="${midX}" y2="${H-pad}" class="k-mid"/>
-    <line x1="${pad}" y1="${midY}" x2="${W-pad}" y2="${midY}" class="k-mid"/>`;
+    <line x1="${pad}" y1="${midY}" x2="${W-pad}" y2="${midY}" class="k-mid"/>
+    <text x="${midX+4}" y="${pad+10}" class="k-midval">${midValX.toFixed(2)}</text>
+    <text x="${W-pad-4}" y="${midY-4}" class="k-midval" text-anchor="end">${midValY.toFixed(2)}</text>`;
   // ticks 0-5
   for (let i = 0; i <= 5; i++) {
     axis += `<text x="${x(i)}" y="${H-pad+18}" class="k-tick" text-anchor="middle">${i}</text>`;
@@ -1074,7 +1086,7 @@ function kuadranSVG(pts, MID) {
   const sorted = pts.slice().sort((a, b) => b.trip - a.trip);
   let dots = '';
   for (const p of sorted) {
-    const hiP = p.perf >= MID, murah = p.price >= MID;
+    const hiP = p.perf >= midValY, murah = p.price >= midValX;
     const cls = hiP && murah ? 'd-star' : hiP ? 'd-premium' : murah ? 'd-hemat' : 'd-evaluasi';
     const cx = x(p.price), cy = y(p.perf), rr = r(p.trip);
     dots += `<circle cx="${cx}" cy="${cy}" r="${rr}" class="k-dot ${cls}"><title>${p.label} — ${p.sub}\nPerforma ${p.perf.toFixed(2)} · Price ${p.price.toFixed(2)} · ${p.trip} trip</title></circle>`;
