@@ -743,9 +743,28 @@ function priceExplainer() {
     </div>
   </div>`;
 }
-let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '', divider: 'dynamic' };
+let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '', divider: 'dynamic', highlightSP: false };
 function setKuadran(field, val) {
   kuadranFilter[field] = (field === 'minTrip') ? (+val || 0) : val;
+  render();
+}
+
+// ---- Master data: Strategic Partner eksisting (localStorage) ----
+const SP_KEY = 'cargoscore_strategic_v1';
+function getStrategicPartners() {
+  try { return JSON.parse(localStorage.getItem(SP_KEY) || '[]'); } catch { return []; }
+}
+function saveStrategicPartners(list) {
+  localStorage.setItem(SP_KEY, JSON.stringify([...new Set(list)].sort()));
+}
+function addStrategicPartner(vendor) {
+  if (!vendor) return;
+  const list = getStrategicPartners();
+  if (!list.includes(vendor)) { list.push(vendor); saveStrategicPartners(list); }
+  render();
+}
+function removeStrategicPartner(vendor) {
+  saveStrategicPartners(getStrategicPartners().filter(v => v !== vendor));
   render();
 }
 
@@ -759,6 +778,7 @@ function performaOf(sAvail, sFul, sOta, sOtd) {
 // Kumpulkan titik kuadran (agregat vendor / per rute), tertimbang trip
 function kuadranPoints() {
   const f = kuadranFilter;
+  const spSet = new Set(getStrategicPartners());
   const pts = [];
   if (f.mode === 'byvendor') {
     // 1 vendor terpilih: tiap rute dia jadi 1 titik
@@ -769,7 +789,7 @@ function kuadranPoints() {
         if (d.trip < f.minTrip) continue;
         const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
         pts.push({ label: `${d.tujuan}`, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
-                   perf, price: d.scorePrice, trip: d.trip });
+                   perf, price: d.scorePrice, trip: d.trip, vendor: v.vendor, isSP: spSet.has(v.vendor) });
       }
     }
   } else if (f.mode === 'route') {
@@ -783,7 +803,7 @@ function kuadranPoints() {
         if (d.trip < f.minTrip) continue;
         const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
         pts.push({ label: v.vendor, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
-                   perf, price: d.scorePrice, trip: d.trip });
+                   perf, price: d.scorePrice, trip: d.trip, vendor: v.vendor, isSP: spSet.has(v.vendor) });
       }
     }
   } else {
@@ -798,7 +818,8 @@ function kuadranPoints() {
       }
       if (tw < f.minTrip) continue;
       pts.push({ label: v.vendor, sub: `${v.routes} rute · ${tw} trip`,
-                 perf: tw ? wPerf / tw : 0, price: twPrice ? wPrice / twPrice : 0, trip: tw });
+                 perf: tw ? wPerf / tw : 0, price: twPrice ? wPrice / twPrice : 0, trip: tw,
+                 vendor: v.vendor, isSP: spSet.has(v.vendor) });
     }
   }
   return pts;
@@ -1043,6 +1064,23 @@ function renderKuadran() {
       <option value="static" ${f.divider==='static'?'selected':''}>Statis (2,5)</option>
     </select></div>
     <div class="fld"><label>Min. Trip</label><input type="number" min="1" value="${f.minTrip}" style="min-width:70px" oninput="setKuadran('minTrip',this.value)"></div>
+    <div class="fld"><label>&nbsp;</label><label class="chk"><input type="checkbox" ${f.highlightSP?'checked':''} onchange="setKuadran('highlightSP',this.checked)"> Tandai Strategic Partner Eksisting</label></div>
+  </div>`;
+
+  // panel editor master data Strategic Partner eksisting
+  const spList = getStrategicPartners();
+  const allVendors = [...new Set(computed.vendors.map(v => v.vendor))].sort();
+  const spOptions = allVendors.filter(v => !spList.includes(v)).map(v => `<option value="${v}">${v}</option>`).join('');
+  const spChips = spList.length
+    ? spList.map(v => `<span class="sp-chip">${v}<button class="sp-x" onclick="removeStrategicPartner('${v.replace(/'/g,"\\'")}')" title="Hapus">×</button></span>`).join('')
+    : '<span class="kqv-empty">Belum ada vendor eksisting. Tambahkan dari dropdown.</span>';
+  const spPanel = `<div class="sp-panel">
+    <div class="sp-head"><b>Master Data — Strategic Partner Eksisting</b> <span class="sp-count">${spList.length} vendor</span></div>
+    <div class="sp-editor">
+      <select id="spPick"><option value="">— pilih vendor —</option>${spOptions}</select>
+      <button class="btn-export" onclick="addStrategicPartner(document.getElementById('spPick').value)">+ Tambah</button>
+    </div>
+    <div class="sp-chips">${spChips}</div>
   </div>`;
 
   const pts = kuadranPoints();
@@ -1068,7 +1106,7 @@ function renderKuadran() {
     groups[key].push(showDetail ? `${p.label} <span class="kqv-sub">${p.sub}</span>` : p.label);
   }
 
-  const chart = kuadranSVG(pts, midX, midY);
+  const chart = kuadranSVG(pts, midX, midY, f.highlightSP);
   const chip = (arr) => arr.length ? `<div class="kqv-list">${arr.map(v => `<span class="kqv">${v}</span>`).join('')}</div>` : `<div class="kqv-empty">—</div>`;
   const legend = `<div class="kuadran-legend">
     <div class="kq-box star"><div class="kq-head"><b>⭐ Strategic Partner</b><i>${q.star}</i></div><span class="kq-desc">Performa bagus + murah</span>${chip(groups.star)}</div>
@@ -1085,10 +1123,12 @@ function renderKuadran() {
     Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
     Ukuran titik = jumlah trip. Garis pembagi ${f.divider==='dynamic'?`<b>dinamis</b> = rata-rata titik tampil (Price <b>${midX.toFixed(2)}</b> · Performa <b>${midY.toFixed(2)}</b>)`:'<b>statis</b> di skor <b>2,5</b>'}. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
 
-  return toolbar + note + `<div class="kuadran-wrap">${chart}${legend}</div>`;
+  const spNote = f.highlightSP ? `<div class="sdnote sp-note">Mode <b>Tandai Eksisting</b> aktif: vendor Strategic Partner eksisting ditampilkan menonjol, lainnya dipudarkan. <b>Garis pembagi & posisi titik tidak berubah</b> — tetap dihitung dari semua vendor.</div>` : '';
+
+  return toolbar + spPanel + note + spNote + `<div class="kuadran-wrap">${chart}${legend}</div>`;
 }
 
-function kuadranSVG(pts, midValX, midValY) {
+function kuadranSVG(pts, midValX, midValY, highlightSP) {
   const W = 720, H = 560, pad = 56;
   const x = price => pad + (price / 5) * (W - pad * 2);
   const y = perf => (H - pad) - (perf / 5) * (H - pad * 2);
@@ -1125,15 +1165,20 @@ function kuadranSVG(pts, midValX, midValY) {
     <text x="${(midX+W-pad)/2}" y="${H-pad-8}" class="k-qlabel hemat" text-anchor="middle">CONTRIBUTOR PARTNER</text>
     <text x="${(pad+midX)/2}" y="${H-pad-8}" class="k-qlabel evaluasi" text-anchor="middle">⚠ NEED REVIEW</text>`;
 
-  // titik-titik (urut trip desc biar besar di belakang)
-  const sorted = pts.slice().sort((a, b) => b.trip - a.trip);
+  // titik-titik (urut trip desc biar besar di belakang).
+  // Kalau highlight SP: non-eksisting digambar dulu (pudar), eksisting terakhir (menonjol di atas).
+  let sorted = pts.slice().sort((a, b) => b.trip - a.trip);
+  if (highlightSP) sorted = sorted.sort((a, b) => (a.isSP === b.isSP) ? 0 : (a.isSP ? 1 : -1));
   let dots = '';
   for (const p of sorted) {
     const hiP = p.perf >= midValY, murah = p.price >= midValX;
     const cls = hiP && murah ? 'd-star' : hiP ? 'd-premium' : murah ? 'd-hemat' : 'd-evaluasi';
     const cx = x(p.price), cy = y(p.perf), rr = r(p.trip);
-    dots += `<circle cx="${cx}" cy="${cy}" r="${rr}" class="k-dot ${cls}"><title>${p.label} — ${p.sub}\nPerforma ${p.perf.toFixed(2)} · Price ${p.price.toFixed(2)} · ${p.trip} trip</title></circle>`;
-    if (rr > 12) dots += `<text x="${cx}" y="${cy+3}" class="k-dotlabel" text-anchor="middle">${p.label}</text>`;
+    const hl = highlightSP ? (p.isSP ? ' k-sp' : ' k-faded') : '';
+    const spRing = (highlightSP && p.isSP) ? `<circle cx="${cx}" cy="${cy}" r="${rr+3}" class="k-sp-ring"/>` : '';
+    dots += spRing + `<circle cx="${cx}" cy="${cy}" r="${rr}" class="k-dot ${cls}${hl}"><title>${p.label}${p.isSP?' ★ eksisting':''} — ${p.sub}\nPerforma ${p.perf.toFixed(2)} · Price ${p.price.toFixed(2)} · ${p.trip} trip</title></circle>`;
+    const showLabel = rr > 12 || (highlightSP && p.isSP);
+    if (showLabel) dots += `<text x="${cx}" y="${cy+3}" class="k-dotlabel${hl}" text-anchor="middle">${p.label}</text>`;
   }
 
   return `<svg viewBox="0 0 ${W} ${H}" class="kuadran-svg" preserveAspectRatio="xMidYMid meet">

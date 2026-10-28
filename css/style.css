@@ -369,3 +369,24 @@ tbody tr:hover{background:rgba(31,148,136,.05)}
 .loading-steps .lstep.done{color:var(--ink-dim)}
 .loading-steps .lstep.done .lmark{color:var(--teal)}
 .loading-steps .lstep.warn .lmark{color:var(--amber)}
+
+/* ---- Master data Strategic Partner eksisting (menu Kuadran) ---- */
+.sp-panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.sp-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.sp-head b{font-size:13px;color:var(--ink)}
+.sp-count{font-family:var(--mono);font-size:11px;color:var(--teal);background:rgba(31,148,136,.1);border:1px solid rgba(31,148,136,.25);border-radius:3px;padding:1px 8px}
+.sp-editor{display:flex;gap:8px;margin-bottom:10px}
+.sp-editor select{flex:0 0 240px;max-width:240px}
+.sp-chips{display:flex;flex-wrap:wrap;gap:6px}
+.sp-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;font-weight:700;
+  background:rgba(31,148,136,.1);color:var(--teal);border:1px solid rgba(31,148,136,.3);border-radius:4px;padding:3px 4px 3px 9px}
+.sp-x{border:none;background:none;color:var(--teal);font-size:15px;line-height:1;cursor:pointer;padding:0 3px;opacity:.7}
+.sp-x:hover{opacity:1;color:var(--red)}
+.sp-note{border-left:3px solid var(--teal)}
+
+/* highlight dot di kuadran */
+.k-dot.k-faded{opacity:.14 !important;stroke:none}
+.k-dot.k-sp{opacity:1 !important;stroke:#fff;stroke-width:2.5}
+.k-sp-ring{fill:none;stroke:var(--teal);stroke-width:2.5;opacity:.9}
+.k-dotlabel.k-faded{opacity:.2}
+.k-dotlabel.k-sp{fill:var(--ink);font-weight:700}
