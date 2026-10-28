@@ -8,11 +8,43 @@ let state = { month: null, rolling: 3, pulau: '', search: '', tab: 'master', ven
 let computed = null;
 
 /* ---------- boot ---------- */
+/* ---------- loading screen ---------- */
+const LOAD_STEPS = [
+  { id: 'trip',  label: 'Menarik data trip (Google Sheets)' },
+  { id: 'price', label: 'Memuat arsip harga' },
+  { id: 'sea',   label: 'Memuat data pelayaran' },
+  { id: 'demand',label: 'Memuat data demand' },
+];
+function loadInit() {
+  const box = document.getElementById('loadingSteps');
+  if (box) box.innerHTML = LOAD_STEPS.map(s =>
+    `<div class="lstep" id="lstep-${s.id}"><span class="lmark">○</span><span>${s.label}</span></div>`).join('');
+}
+function loadStep(id, state, text) {
+  const el = document.getElementById('lstep-' + id);
+  const stepEl = document.getElementById('loadingStep');
+  const row = LOAD_STEPS.find(s => s.id === id);
+  if (stepEl && row && state === 'active') stepEl.textContent = row.label + '…';
+  if (!el) return;
+  el.classList.remove('active', 'done', 'warn');
+  if (state === 'active') { el.classList.add('active'); el.querySelector('.lmark').textContent = '◌'; }
+  else if (state === 'warn') { el.classList.add('warn'); el.querySelector('.lmark').textContent = '!'; if (text) el.querySelector('span:last-child').textContent = text; }
+  else if (state === 'done') { el.classList.add('done'); el.querySelector('.lmark').textContent = '✓'; }
+}
+function loadDone() {
+  const stepEl = document.getElementById('loadingStep');
+  if (stepEl) stepEl.textContent = 'Siap';
+  const scr = document.getElementById('loadingScreen');
+  if (scr) { scr.classList.add('done'); setTimeout(() => scr.remove(), 450); }
+}
+
 async function boot() {
+  loadInit();
   const masterDefault = await fetch('data/master-scoring.json').then(r => r.json());
   const pulauMap = await fetch('data/pulau-map.json').then(r => r.ok ? r.json() : {}).catch(() => ({}));
 
   // ---- Sumber data: Google Sheets (live) dengan fallback ke JSON statis ----
+  loadStep('trip', 'active');
   let liveOK = false;
   if (typeof DataSource !== 'undefined' && DataSource.ENABLED) {
     try {
@@ -33,9 +65,13 @@ async function boot() {
     DATA = await fetch('data/trips.json').then(r => r.json());
     try { SUPPLY = await fetch('data/supply.json').then(r => r.ok ? r.json() : null); } catch { SUPPLY = null; }
     window.__dataSource = 'JSON statis';
+    loadStep('trip', 'warn', 'Pakai data offline (GSheet tak terjangkau)');
+  } else {
+    loadStep('trip', 'done');
   }
 
   // price map opsional
+  loadStep('price', 'active');
   try { PRICE = await fetch('data/price.json').then(r => r.ok ? r.json() : null); } catch { PRICE = null; }
   // arsip price per bulan (point-in-time). Coba fetch tiap bulan yg ada di data; 404 = lewati (fallback ke PRICE).
   PRICE_BY_MONTH = {};
@@ -59,14 +95,20 @@ async function boot() {
     }));
   }
   window.__priceArchive = Object.keys(PRICE_BY_MONTH).length;
+  loadStep('price', 'done');
   // OTD 2026 (pelayaran) — live, buat menu Analisa Sea. Gagal = fitur nonaktif, dashboard tetap jalan.
+  loadStep('sea', 'active');
   SEA_DATA = null;
   try {
     if (typeof SeaData !== 'undefined' && SeaData.ENABLED) SEA_DATA = await SeaData.fetch();
   } catch (e) { SEA_DATA = null; }
   window.__seaData = SEA_DATA ? SEA_DATA.length : 0;
+  if (SEA_DATA && SEA_DATA.length) loadStep('sea', 'done');
+  else loadStep('sea', 'warn', 'Data pelayaran tak termuat (menu Analytic nonaktif)');
   // supply-demand (demand CBM) selalu dari JSON — di-push manual tiap bulan
+  loadStep('demand', 'active');
   try { SUPDEM = await fetch('data/supply-demand.json').then(r => r.ok ? r.json() : null); } catch { SUPDEM = null; }
+  loadStep('demand', 'done');
 
   // master: localStorage override kalau ada
   const saved = localStorage.getItem(LS_KEY);
@@ -91,6 +133,7 @@ async function boot() {
     '<option value="">Semua</option>' + pulaus.map(p => `<option>${p}</option>`).join('');
 
   bindEvents();
+  loadDone();     // data siap; tutup loading sebelum render (render tak boleh menahan overlay)
   recompute();
 }
 
@@ -1532,4 +1575,10 @@ function render() {
   }
 }
 
-boot();
+boot().catch(e => {
+  console.error('Boot gagal:', e);
+  const stepEl = document.getElementById('loadingStep');
+  if (stepEl) stepEl.textContent = 'Gagal memuat data. Coba muat ulang halaman.';
+  const sp = document.querySelector('.loading-spinner');
+  if (sp) sp.style.display = 'none';
+});
