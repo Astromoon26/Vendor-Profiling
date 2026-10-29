@@ -743,7 +743,7 @@ function priceExplainer() {
     </div>
   </div>`;
 }
-let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '', divider: 'dynamic', highlightSP: false };
+let kuadranFilter = { mode: 'vendor', origin: '', tujuan: '', type: '', minTrip: 1, byVendor: '', divider: 'dynamic', highlightSP: false, moda: '' };
 function setKuadran(field, val) {
   kuadranFilter[field] = (field === 'minTrip') ? (+val || 0) : val;
   render();
@@ -786,6 +786,7 @@ function kuadranPoints() {
     if (v) {
       for (const d of (v.detail || [])) {
         if (d.trip < 1) continue;
+        if (f.moda && d.moda !== f.moda) continue;
         if (d.trip < f.minTrip) continue;
         const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
         pts.push({ label: `${d.tujuan}`, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
@@ -800,6 +801,7 @@ function kuadranPoints() {
         if (f.origin && d.origin !== f.origin) continue;
         if (f.tujuan && d.tujuan !== f.tujuan) continue;
         if (f.type && d.type !== f.type) continue;
+        if (f.moda && d.moda !== f.moda) continue;
         if (d.trip < f.minTrip) continue;
         const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
         pts.push({ label: v.vendor, sub: `${d.origin} → ${d.tujuan} · ${d.type}`,
@@ -809,15 +811,16 @@ function kuadranPoints() {
   } else {
     // agregat vendor: rata2 tertimbang trip antar rute
     for (const v of computed.vendors) {
-      let tw = 0, wPerf = 0, wPrice = 0, twPrice = 0;
+      let tw = 0, wPerf = 0, wPrice = 0, twPrice = 0, nRoute = 0;
       for (const d of (v.detail || [])) {
         if (d.trip < 1) continue;
+        if (f.moda && d.moda !== f.moda) continue;   // hitung ulang: hanya rute moda terpilih
         const perf = performaOf(d.scoreAvail, d.scoreFul, d.scoreOta, d.scoreOtd);
-        wPerf += perf * d.trip; tw += d.trip;
+        wPerf += perf * d.trip; tw += d.trip; nRoute++;
         wPrice += d.scorePrice * d.trip; twPrice += d.trip;
       }
       if (tw < f.minTrip) continue;
-      pts.push({ label: v.vendor, sub: `${v.routes} rute · ${tw} trip`,
+      pts.push({ label: v.vendor, sub: `${nRoute} rute · ${tw} trip`,
                  perf: tw ? wPerf / tw : 0, price: twPrice ? wPrice / twPrice : 0, trip: tw,
                  vendor: v.vendor, isSP: spSet.has(v.vendor) });
     }
@@ -1031,12 +1034,14 @@ function exportSeaCSV() {
 function renderKuadran() {
   const f = kuadranFilter;
   // opsi filter dari detail
-  const origins = new Set(), tujuans = new Set(), types = new Set();
+  const origins = new Set(), tujuans = new Set(), types = new Set(), modas = new Set();
   for (const v of computed.vendors) for (const d of (v.detail || [])) {
-    origins.add(d.origin); tujuans.add(d.tujuan); types.add(d.type);
+    origins.add(d.origin); tujuans.add(d.tujuan); types.add(d.type); if (d.moda) modas.add(d.moda);
   }
   const opt = (set, cur, ph) => `<option value="">${ph}</option>` +
     [...set].sort().map(x => `<option ${x===cur?'selected':''} value="${x}">${x}</option>`).join('');
+  const optModa = `<option value="">Semua</option>` +
+    [...modas].sort().map(x => `<option ${x===f.moda?'selected':''} value="${x}">${x==='SEA'?'Sea':'Land'}</option>`).join('');
 
   const routeFilters = f.mode === 'route' ? `
     <div class="fld"><label>Origin</label><select onchange="setKuadran('origin',this.value)">${opt(origins,f.origin,'Semua')}</select></div>
@@ -1063,6 +1068,7 @@ function renderKuadran() {
       <option value="dynamic" ${f.divider==='dynamic'?'selected':''}>Dinamis (rata-rata filter)</option>
       <option value="static" ${f.divider==='static'?'selected':''}>Statis (2,5)</option>
     </select></div>
+    <div class="fld"><label>Moda</label><select onchange="setKuadran('moda',this.value)">${optModa}</select></div>
     <div class="fld"><label>Min. Trip</label><input type="number" min="1" value="${f.minTrip}" style="min-width:70px" oninput="setKuadran('minTrip',this.value)"></div>
     <div class="fld"><label>&nbsp;</label><label class="chk"><input type="checkbox" ${f.highlightSP?'checked':''} onchange="setKuadran('highlightSP',this.checked)"> Tandai Strategic Partner Eksisting</label></div>
   </div>`;
@@ -1121,7 +1127,7 @@ function renderKuadran() {
   const winLabel = `<span class="kq-window">Window: <b>${mName[wlo]||wlo}–${mName[whi]||whi}</b> · ${computed.tripCount.toLocaleString('id-ID')} trip</span>`;
   const note = `<div class="sdnote">${winLabel} — Sumbu <b>X = Price</b> (kanan = murah, skor 5) · Sumbu <b>Y = Performa</b> (atas = bagus).
     Performa = gabungan Proportion + Fulfillment + OTA + OTD (bobot Master Scoring, tanpa Price).
-    Ukuran titik = jumlah trip. Garis pembagi ${f.divider==='dynamic'?`<b>dinamis</b> = rata-rata titik tampil (Price <b>${midX.toFixed(2)}</b> · Performa <b>${midY.toFixed(2)}</b>)`:'<b>statis</b> di skor <b>2,5</b>'}. ${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
+    Ukuran titik = jumlah trip. Garis pembagi ${f.divider==='dynamic'?`<b>dinamis</b> = rata-rata titik tampil (Price <b>${midX.toFixed(2)}</b> · Performa <b>${midY.toFixed(2)}</b>)`:'<b>statis</b> di skor <b>2,5</b>'}. ${f.moda?`Difilter moda <b>${f.moda==='SEA'?'Sea':'Land'}</b> — angka dihitung ulang hanya dari rute ${f.moda==='SEA'?'laut':'darat'}. `:''}${f.mode==='route'?'Tiap titik = 1 vendor di 1 rute.':f.mode==='byvendor'?`Tiap titik = 1 rute yang dilayani <b>${f.byVendor||'—'}</b>.`:'Tiap titik = 1 vendor (rata-rata tertimbang trip).'}</div>`;
 
   const spNote = f.highlightSP ? `<div class="sdnote sp-note">Mode <b>Tandai Eksisting</b> aktif: vendor Strategic Partner eksisting ditampilkan menonjol, lainnya dipudarkan. <b>Garis pembagi & posisi titik tidak berubah</b> — tetap dihitung dari semua vendor.</div>` : '';
 
