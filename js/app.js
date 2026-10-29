@@ -405,6 +405,9 @@ function renderVendorAktif() {
   // Opsi B: kalau filter moda aktif, hitung ULANG angka vendor cuma dari rute moda itu
   let baseVendors = computed.vendors;
   if (f.moda) {
+    // total trip moda ini (dari semua vendor) -> jadi pembaga % Total Trip
+    const modaTotalTrip = computed.vendors.reduce((s, v) =>
+      s + (v.detail || []).filter(d => d.moda === f.moda).reduce((a, d) => a + d.trip, 0), 0);
     baseVendors = computed.vendors.map(v => {
       const det = (v.detail || []).filter(d => d.moda === f.moda);
       if (!det.length) return null;
@@ -412,7 +415,7 @@ function renderVendorAktif() {
       const tujuans = new Set(det.map(d => d.tujuan)).size;
       const avgFinal = Math.round((det.reduce((s, d) => s + d.finalScore, 0) / det.length) * 100) / 100;
       return { ...v, trip, routes: det.length, tujuans, avgFinal,
-               shareTrip: computed.tripCount ? trip / computed.tripCount : 0,
+               shareTrip: modaTotalTrip ? trip / modaTotalTrip : 0,
                detail: det, _moda: f.moda };
     }).filter(Boolean);
   }
@@ -442,7 +445,7 @@ function renderVendorAktif() {
   if (!vendors.length) return toolbar + `<div class="empty">Tidak ada vendor pada filter ini.</div>`;
   const sh = (label, key) => `<th class="sortable" onclick="sortVa('${key}')">${label} ${vaArrow(key)}</th>`;
   const modaBanner = f.moda
-    ? `<div class="modabanner">Menampilkan ranking khusus <b>${modaBadge(f.moda)}</b> — semua angka (Trip, Rute, Tujuan, Skor) dihitung ulang hanya dari rute ${f.moda==='SEA'?'laut':'darat'}.</div>`
+    ? `<div class="modabanner">Menampilkan ranking khusus <b>${modaBadge(f.moda)}</b> — semua angka (Trip, % Total Trip, Rute, Tujuan, Skor) dihitung ulang hanya dari rute ${f.moda==='SEA'?'laut':'darat'}. <b>% Total Trip</b> = share terhadap total trip ${f.moda==='SEA'?'laut':'darat'} (semua vendor = 100%).</div>`
     : '';
   let html = toolbar + modaBanner + `<div class="tablewrap"><table class="vendortable"><thead><tr>
     <th></th><th>#</th><th>Vendor</th>${sh('Total Trip','trip')}${sh('% Total Trip','shareTrip')}${sh('Rute Dilayani','routes')}${sh('Tujuan Dilayani','tujuans')}${sh('Avg Skor Akhir','avgFinal')}
